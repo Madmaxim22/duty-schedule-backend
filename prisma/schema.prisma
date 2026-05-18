@@ -1,0 +1,71 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  admin
+  user
+}
+
+enum UserStatus {
+  pending
+  approved
+  rejected
+}
+
+enum DutySection {
+  A
+  B
+}
+
+model User {
+  id           String     @id @default(uuid())
+  email        String     @unique
+  passwordHash String     @map("password_hash")
+  fullName     String     @map("full_name")
+  role         UserRole   @default(user)
+  status       UserStatus @default(pending)
+  createdAt    DateTime   @default(now()) @map("created_at")
+
+  assignments      DutyAssignment[] @relation("AssignedUser")
+  assignmentsMade  DutyAssignment[] @relation("AssignedBy")
+  refreshTokens    RefreshToken[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String   @map("user_id")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model DutyAssignment {
+  id         String      @id @default(uuid())
+  dutyDate   DateTime    @map("duty_date") @db.Date
+  section    DutySection
+  office     String
+  userId     String?     @map("user_id")
+  assignedBy String?     @map("assigned_by")
+  createdAt  DateTime    @default(now()) @map("created_at")
+
+  user     User? @relation("AssignedUser", fields: [userId], references: [id], onDelete: SetNull)
+  assigner User? @relation("AssignedBy", fields: [assignedBy], references: [id], onDelete: SetNull)
+
+  @@unique([dutyDate, section, office])
+  @@index([dutyDate])
+  @@index([userId, dutyDate])
+  @@map("duty_assignments")
+}

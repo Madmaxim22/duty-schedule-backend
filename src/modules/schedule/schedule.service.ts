@@ -1,0 +1,221 @@
+import { DutySection } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
+import {
+  DUTY_SECTIONS,
+  getAllSlots,
+  isMandatoryOffice,
+  isValidSlot,
+} from '../../lib/offices.js';
+import { AppError } from '../../lib/errors.js';
+
+function parseDate(dateStr: string): Date {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d));
+}
+
+function formatDate(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+function monthRange(year: number, month: number) {
+  const start = new Date(Date.UTC(year, month - 1, 1));
+  const end = new Date(Date.UTC(year, month, 0));
+  return { start, end };
+}
+
+function eachDateInMonth(year: number, month: number): string[] {
+  const { start, end } = monthRange(year, month);
+  const dates: string[] = [];
+  const cur = new Date(start);
+  while (cur <= end) {
+    dates.push(formatDate(cur));
+    cur.setUTCDate(cur.getUTCDate() + 1);
+  }
+  return dates;
+}
+
+function isDayComplete(
+  assignmentsBySlot: Map<string, { userId: string }> | undefined,
+): boolean {
+  for (const section of DUTY_SECTIONS) {
+    for (const office of section.offices) {
+      if (!office.mandatory) continue;
+      if (!assignmentsBySlot?.has(`${section.id}-${office.code}`)) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+function buildSlotResponse(
+  section: 'A' | 'B',
+  office: string,
+  assignment?: {
+    user: { id: string; fullName: string } | null;
+  } | null,
+) {
+  return {
+    section,
+    office,
+    mandatory: isMandatoryOffice(office),
+    user: assignment?.user
+      ? { id: assignment.user.id, fullName: assignment.user.fullName }
+      : null,
+  };
+}
+
+export async function getMonthSchedule(
+  year: number,
+  month: number,
+  currentUserId: string,
+  isAdmin: boolean,
+) {
+  const { start, end } = monthRange(year, month);
+
+  const assignments = await prisma.dutyAssignment.findMany({
+    where: {
+      dutyDate: { gte: start, lte: end },
+    },
+    include: {
+      user: { select: { id: true, fullName: true } },
+    },
+  });
+
+  const daysMap = new Map<string, { date: string; isMyDuty: boolean }>();
+  const assignmentsByDate = new Map<string, Map<string, { userId: string }>>();
+
+  for (const a of assignments) {
+    const dateKey = formatDate(a.dutyDate);
+    const existing = daysMap.get(dateKey) ?? {
+      date: dateKey,
+      isMyDuty: false,
+    };
+    if (a.userId === currentUserId) {
+      existing.isMyDuty = true;
+    }
+    daysMap.set(dateKey, existing);
+
+    if (a.userId) {
+      const slots =
+        assignmentsByDate.get(dateKey) ?? new Map<string, { userId: string }>();
+      slots.set(`${a.section}-${a.office}`, { userId: a.userId });
+      assignmentsByDate.set(dateKey, slots);
+    }
+  }
+
+  const days = Array.from(daysMap.values()).sort((a, b) => a.date.localeCompare(b.date));
+
+  if (!isAdmin) {
+    return { year, month, days };
+  }
+
+  const incompleteDates = eachDateInMonth(year, month).filter(
+    (date) => !isDayComplete(assignmentsByDate.get(date)),
+  );
+
+  return {
+    year,
+    month,
+    days,
+    monthCoverage: {
+      allComplete: incompleteDates.length === 0,
+      incompleteDates,
+    },
+  };
+}
+
+export async function getDaySchedule(dateStr: string) {
+  const dutyDate = parseDate(dateStr);
+
+  const assignments = await prisma.dutyAssignment.findMany({
+    where: { dutyDate },
+    include: {
+      user: { select: { id: true, fullName: true } },
+    },
+  });
+
+  const byKey = new Map(
+    assignments.map((a) => [`${a.section}-${a.office}`, a]),
+  );
+
+  const sections = DUTY_SECTIONS.map((section) => ({
+    id: section.id,
+    label: section.label,
+    offices: section.offices.map((office) => {
+      const assignment = byKey.get(`${section.id}-${office.code}`);
+      return buildSlotResponse(section.id, office.code, assignment);
+    }),
+  }));
+
+  const warnings: string[] = [];
+  for (const section of sections) {
+    for (const office of section.offices) {
+      if (office.mandatory && !office.user) {
+        warnings.push(`Кабинет ${office.office} (секция ${section.id}) не заполнен`);
+      }
+    }
+  }
+
+  return { date: dateStr, sections, warnings };
+}
+
+export async function putDaySchedule(
+  dateStr: string,
+  assignments: Array<{ section: 'A' | 'B'; office: string; userId: string | null }>,
+  adminId: string,
+) {
+  const dutyDate = parseDate(dateStr);
+  const expectedSlots = getAllSlots();
+
+  if (assignments.length !== expectedSlots.length) {
+    throw new AppError(400, 'Нужно передать все слоты дня');
+  }
+
+  const seen = new Set<string>();
+  for (const item of assignments) {
+    const key = `${item.section}-${item.office}`;
+    if (!isValidSlot(item.section, item.office)) {
+      throw new AppError(400, `Недопустимый слот: ${item.section}/${item.office}`);
+    }
+    if (seen.has(key)) {
+      throw new AppError(400, `Дублирующийся слот: ${key}`);
+    }
+    seen.add(key);
+
+    if (item.userId) {
+      const user = await prisma.user.findFirst({
+        where: { id: item.userId, status: 'approved' },
+      });
+      if (!user) {
+        throw new AppError(400, `Пользователь не найден или не подтверждён: ${item.userId}`);
+      }
+    }
+  }
+
+  for (const slot of expectedSlots) {
+    if (!seen.has(`${slot.section}-${slot.office}`)) {
+      throw new AppError(400, `Отсутствует слот: ${slot.section}/${slot.office}`);
+    }
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.dutyAssignment.deleteMany({ where: { dutyDate } });
+
+    const toCreate = assignments
+      .filter((a) => a.userId !== null)
+      .map((a) => ({
+        dutyDate,
+        section: a.section as DutySection,
+        office: a.office,
+        userId: a.userId!,
+        assignedBy: adminId,
+      }));
+
+    if (toCreate.length > 0) {
+      await tx.dutyAssignment.createMany({ data: toCreate });
+    }
+  });
+
+  return getDaySchedule(dateStr);
+}

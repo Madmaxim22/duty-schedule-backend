@@ -1,0 +1,57 @@
+import { prisma } from '../../lib/prisma.js';
+import { AppError } from '../../lib/errors.js';
+
+export async function listPendingUsers() {
+  return prisma.user.findMany({
+    where: { status: 'pending' },
+    orderBy: { createdAt: 'asc' },
+    select: {
+      id: true,
+      email: true,
+      fullName: true,
+      createdAt: true,
+    },
+  });
+}
+
+export async function listApprovedUsers() {
+  return prisma.user.findMany({
+    where: { status: 'approved' },
+    orderBy: { fullName: 'asc' },
+    select: {
+      id: true,
+      email: true,
+      fullName: true,
+      role: true,
+    },
+  });
+}
+
+export async function updateUserStatus(
+  userId: string,
+  action: 'approve' | 'reject',
+) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) {
+    throw new AppError(404, 'Пользователь не найден');
+  }
+
+  if (user.role === 'admin') {
+    throw new AppError(400, 'Нельзя изменить статус администратора');
+  }
+
+  if (user.status !== 'pending') {
+    throw new AppError(400, 'Пользователь уже обработан');
+  }
+
+  return prisma.user.update({
+    where: { id: userId },
+    data: { status: action === 'approve' ? 'approved' : 'rejected' },
+    select: {
+      id: true,
+      email: true,
+      fullName: true,
+      status: true,
+    },
+  });
+}
