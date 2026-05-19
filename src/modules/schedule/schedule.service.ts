@@ -52,7 +52,7 @@ function buildSlotResponse(
   section: 'A' | 'B',
   office: string,
   assignment?: {
-    user: { id: string; fullName: string } | null;
+    user: { id: string; fullName: string; avatarUrl: string | null } | null;
   } | null,
 ) {
   return {
@@ -60,7 +60,11 @@ function buildSlotResponse(
     office,
     mandatory: isMandatoryOffice(office),
     user: assignment?.user
-      ? { id: assignment.user.id, fullName: assignment.user.fullName }
+      ? {
+          id: assignment.user.id,
+          fullName: assignment.user.fullName,
+          avatarUrl: assignment.user.avatarUrl,
+        }
       : null,
   };
 }
@@ -131,7 +135,7 @@ export async function getDaySchedule(dateStr: string) {
   const assignments = await prisma.dutyAssignment.findMany({
     where: { dutyDate },
     include: {
-      user: { select: { id: true, fullName: true } },
+      user: { select: { id: true, fullName: true, avatarUrl: true } },
     },
   });
 
