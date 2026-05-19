@@ -69,3 +69,12 @@ export async function updateUserStatus(
     },
   });
 }
+
+export async function deleteUser(userId: string, adminId: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new AppError(404, 'Пользователь не найден');
+  if (user.id === adminId) throw new AppError(400, 'Нельзя удалить свою учётную запись');
+  if (user.role === 'admin') throw new AppError(400, 'Нельзя удалить администратора');
+
+  await prisma.user.delete({ where: { id: userId } });
+}

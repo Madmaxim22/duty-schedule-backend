@@ -7,6 +7,7 @@ import {
   listApprovedUsers,
   listPendingUsers,
   updateUserStatus,
+  deleteUser,
 } from './users.service.js';
 
 export const usersRouter = Router();
@@ -38,6 +39,16 @@ usersRouter.patch('/:id', async (req, res, next) => {
       .parse(req.body);
     const user = await updateUserStatus(req.params.id, body.action);
     res.json({ user });
+  } catch (e) {
+    next(e);
+  }
+});
+
+usersRouter.delete('/:id', async (req: AuthRequest, res, next) => {
+  try {
+    const id = z.string().uuid().parse(req.params.id);
+    await deleteUser(id, req.user!.sub);
+    res.status(204).send();
   } catch (e) {
     next(e);
   }
