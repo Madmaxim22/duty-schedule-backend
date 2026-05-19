@@ -27,6 +27,20 @@ export async function listApprovedUsers() {
   });
 }
 
+export async function listAllUsers() {
+  return prisma.user.findMany({
+    orderBy: [{ role: 'asc' }, { fullName: 'asc' }],
+    select: {
+      id: true,
+      email: true,
+      fullName: true,
+      role: true,
+      status: true,
+      createdAt: true,
+    },
+  });
+}
+
 export async function updateUserStatus(
   userId: string,
   action: 'approve' | 'reject',

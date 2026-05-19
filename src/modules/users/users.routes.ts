@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { authenticate, type AuthRequest } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/requireRole.js';
 import {
+  listAllUsers,
   listApprovedUsers,
   listPendingUsers,
   updateUserStatus,
@@ -11,6 +12,15 @@ import {
 export const usersRouter = Router();
 
 usersRouter.use(authenticate, requireRole('admin'));
+
+usersRouter.get('/', async (_req, res, next) => {
+  try {
+    const users = await listAllUsers();
+    res.json({ users });
+  } catch (e) {
+    next(e);
+  }
+});
 
 usersRouter.get('/pending', async (_req, res, next) => {
   try {
