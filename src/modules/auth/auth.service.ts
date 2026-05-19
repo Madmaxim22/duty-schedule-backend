@@ -30,14 +30,15 @@ export async function registerUser(input: {
   password: string;
   fullName: string;
 }) {
-  const existing = await prisma.user.findUnique({ where: { email: input.email } });
+  const email = input.email.toLowerCase();
+  const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
     throw new AppError(409, 'Пользователь с таким email уже существует');
   }
 
   const user = await prisma.user.create({
     data: {
-      email: input.email.toLowerCase(),
+      email,
       passwordHash: await hashPassword(input.password),
       fullName: input.fullName.trim(),
       role: 'user',
@@ -125,12 +126,13 @@ export async function getMe(userId: string) {
 }
 
 export async function seedAdminIfNeeded() {
-  const existing = await prisma.user.findUnique({ where: { email: env.adminEmail } });
+  const email = env.adminEmail.toLowerCase();
+  const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) return existing;
 
   return prisma.user.create({
     data: {
-      email: env.adminEmail.toLowerCase(),
+      email,
       passwordHash: await hashPassword(env.adminPassword),
       fullName: env.adminFullName,
       role: 'admin',

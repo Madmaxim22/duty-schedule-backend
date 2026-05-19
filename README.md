@@ -171,8 +171,10 @@ curl http://localhost:3000/api/health
 
 | Метод | Путь | Описание |
 |-------|------|----------|
+| GET | `/admin/users` | Все учётные записи |
 | GET | `/admin/users/pending` | Список заявок на регистрацию |
 | PATCH | `/admin/users/:id` | Тело: `{ "action": "approve" \| "reject" }` |
+| DELETE | `/admin/users/:id` | Удаление пользователя (не себя и не admin) |
 | GET | `/users` | Список подтверждённых пользователей (для назначений) |
 
 ### Расписание
