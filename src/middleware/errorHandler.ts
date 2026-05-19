@@ -1,6 +1,8 @@
 import type { NextFunction, Request, Response } from 'express';
+import { MulterError } from 'multer';
 import { ZodError } from 'zod';
 import { AppError } from '../lib/errors.js';
+import { env } from '../config/env.js';
 
 export function errorHandler(
   err: unknown,
@@ -18,6 +20,20 @@ export function errorHandler(
       message: 'Ошибка валидации',
       errors: err.flatten().fieldErrors,
     });
+    return;
+  }
+
+  if (err instanceof MulterError) {
+    const message =
+      err.code === 'LIMIT_FILE_SIZE'
+        ? `Файл слишком большой (макс. ${Math.round(env.maxAvatarSize / 1024 / 1024)} МБ)`
+        : 'Ошибка загрузки файла';
+    res.status(400).json({ message });
+    return;
+  }
+
+  if (err instanceof Error && err.message.includes('Допустимы только')) {
+    res.status(400).json({ message: err.message });
     return;
   }
 

@@ -1,5 +1,6 @@
 import { prisma } from '../../lib/prisma.js';
 import { AppError } from '../../lib/errors.js';
+import { removeAvatarFile } from '../../lib/avatar.js';
 
 export async function listPendingUsers() {
   return prisma.user.findMany({
@@ -9,6 +10,7 @@ export async function listPendingUsers() {
       id: true,
       email: true,
       fullName: true,
+      avatarUrl: true,
       createdAt: true,
     },
   });
@@ -22,6 +24,7 @@ export async function listApprovedUsers() {
       id: true,
       email: true,
       fullName: true,
+      avatarUrl: true,
       role: true,
     },
   });
@@ -34,6 +37,7 @@ export async function listAllUsers() {
       id: true,
       email: true,
       fullName: true,
+      avatarUrl: true,
       role: true,
       status: true,
       createdAt: true,
@@ -76,5 +80,6 @@ export async function deleteUser(userId: string, adminId: string) {
   if (user.id === adminId) throw new AppError(400, 'Нельзя удалить свою учётную запись');
   if (user.role === 'admin') throw new AppError(400, 'Нельзя удалить администратора');
 
+  await removeAvatarFile(userId);
   await prisma.user.delete({ where: { id: userId } });
 }

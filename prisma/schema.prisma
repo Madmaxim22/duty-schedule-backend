@@ -30,6 +30,7 @@ model User {
   fullName     String     @map("full_name")
   role         UserRole   @default(user)
   status       UserStatus @default(pending)
+  avatarUrl    String?    @map("avatar_url")
   createdAt    DateTime   @default(now()) @map("created_at")
 
   assignments      DutyAssignment[] @relation("AssignedUser")

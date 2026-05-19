@@ -21,6 +21,8 @@ export const env = {
   adminPassword: process.env.ADMIN_PASSWORD ?? 'admin123',
   adminFullName: process.env.ADMIN_FULL_NAME ?? 'Администратор',
   cookieSecure: process.env.COOKIE_SECURE === 'true',
+  uploadDir: process.env.UPLOAD_DIR ?? 'uploads',
+  maxAvatarSize: Number(process.env.MAX_AVATAR_SIZE ?? 2_097_152),
 };
 
 export function assertProductionEnv(): void {

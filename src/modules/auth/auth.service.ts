@@ -1,4 +1,3 @@
-import { randomBytes } from 'crypto';
 import { prisma } from '../../lib/prisma.js';
 import { hashPassword, verifyPassword } from '../../lib/password.js';
 import {
@@ -8,22 +7,8 @@ import {
 } from '../../lib/jwt.js';
 import { AppError } from '../../lib/errors.js';
 import { env } from '../../config/env.js';
-
-function toPublicUser(user: {
-  id: string;
-  email: string;
-  fullName: string;
-  role: 'admin' | 'user';
-  status: 'pending' | 'approved' | 'rejected';
-}) {
-  return {
-    id: user.id,
-    email: user.email,
-    fullName: user.fullName,
-    role: user.role,
-    status: user.status,
-  };
-}
+import { toPublicUser } from '../../lib/public-user.js';
+import { removeAvatarFile, saveAvatarFile } from '../../lib/avatar.js';
 
 export async function registerUser(input: {
   email: string;
@@ -122,6 +107,24 @@ export async function getMe(userId: string) {
   if (!user) {
     throw new AppError(404, 'Пользователь не найден');
   }
+  return toPublicUser(user);
+}
+
+export async function uploadUserAvatar(userId: string, buffer: Buffer) {
+  const avatarUrl = await saveAvatarFile(userId, buffer);
+  const user = await prisma.user.update({
+    where: { id: userId },
+    data: { avatarUrl },
+  });
+  return toPublicUser(user);
+}
+
+export async function deleteUserAvatar(userId: string) {
+  await removeAvatarFile(userId);
+  const user = await prisma.user.update({
+    where: { id: userId },
+    data: { avatarUrl: null },
+  });
   return toPublicUser(user);
 }
 

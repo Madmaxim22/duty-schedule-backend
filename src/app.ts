@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
+import path from 'path';
 import { env } from './config/env.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { authRouter } from './modules/auth/auth.routes.js';
@@ -21,6 +22,7 @@ export function createApp() {
   );
   app.use(express.json());
   app.use(cookieParser());
+  app.use('/uploads', express.static(path.resolve(env.uploadDir)));
 
   app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok' });
