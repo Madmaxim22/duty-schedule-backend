@@ -181,7 +181,7 @@ curl http://localhost:3000/api/health
 
 | Метод | Путь | Описание |
 |-------|------|----------|
-| GET | `/schedule/month?year=2026&month=5` | Дни месяца с флагом `isMyDuty` |
+| GET | `/schedule/month?year=2026&month=5` | Все дни месяца: `isMyDuty`, `duties` (все назначенные слоты) |
 | GET | `/schedule/day/:date` | Детали дня (`YYYY-MM-DD`) |
 | PUT | `/schedule/day/:date` | Назначения на день (только admin) |
 | GET | `/schedule/sections` | Справочник секций и кабинетов |

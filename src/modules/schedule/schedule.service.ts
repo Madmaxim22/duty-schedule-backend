@@ -86,29 +86,47 @@ export async function getMonthSchedule(
     },
   });
 
-  const daysMap = new Map<string, { date: string; isMyDuty: boolean }>();
+  type DayAccum = {
+    isMyDuty: boolean;
+    duties: Array<{ section: 'A' | 'B'; office: string; fullName: string }>;
+  };
+
+  const daysMap = new Map<string, DayAccum>();
   const assignmentsByDate = new Map<string, Map<string, { userId: string }>>();
 
   for (const a of assignments) {
     const dateKey = formatDate(a.dutyDate);
-    const existing = daysMap.get(dateKey) ?? {
-      date: dateKey,
-      isMyDuty: false,
-    };
+    const existing = daysMap.get(dateKey) ?? { isMyDuty: false, duties: [] };
     if (a.userId === currentUserId) {
       existing.isMyDuty = true;
     }
-    daysMap.set(dateKey, existing);
-
-    if (a.userId) {
+    if (a.userId && a.user) {
       const slots =
         assignmentsByDate.get(dateKey) ?? new Map<string, { userId: string }>();
       slots.set(`${a.section}-${a.office}`, { userId: a.userId });
       assignmentsByDate.set(dateKey, slots);
+
+      existing.duties.push({
+        section: a.section,
+        office: a.office,
+        fullName: a.user.fullName,
+      });
     }
+    daysMap.set(dateKey, existing);
   }
 
-  const days = Array.from(daysMap.values()).sort((a, b) => a.date.localeCompare(b.date));
+  const days = eachDateInMonth(year, month).map((date) => {
+    const accum = daysMap.get(date) ?? { isMyDuty: false, duties: [] };
+    accum.duties.sort(
+      (x, y) =>
+        x.section.localeCompare(y.section) || x.office.localeCompare(y.office),
+    );
+    return {
+      date,
+      isMyDuty: accum.isMyDuty,
+      duties: accum.duties,
+    };
+  });
 
   if (!isAdmin) {
     return { year, month, days };
