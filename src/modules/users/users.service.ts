@@ -30,6 +30,41 @@ export async function listApprovedUsers() {
   });
 }
 
+function parseDate(dateStr: string): Date {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d));
+}
+
+export async function listApprovedUsersForDate(dateStr: string) {
+  const dutyDate = parseDate(dateStr);
+
+  const users = await prisma.user.findMany({
+    where: { status: 'approved' },
+    orderBy: { fullName: 'asc' },
+    select: {
+      id: true,
+      email: true,
+      fullName: true,
+      avatarUrl: true,
+      role: true,
+      absences: {
+        where: { absenceDate: dutyDate },
+        take: 1,
+        select: { absenceType: true },
+      },
+    },
+  });
+
+  return users.map(({ absences, ...user }) => {
+    const absence = absences[0];
+    return {
+      ...user,
+      isAbsent: Boolean(absence),
+      ...(absence ? { absenceType: absence.absenceType } : {}),
+    };
+  });
+}
+
 export async function listAllUsers() {
   return prisma.user.findMany({
     orderBy: [{ role: 'asc' }, { fullName: 'asc' }],

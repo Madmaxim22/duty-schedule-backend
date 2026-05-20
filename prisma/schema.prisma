@@ -23,6 +23,17 @@ enum DutySection {
   B
 }
 
+enum DutyChangeType {
+  assigned
+  removed
+  replaced
+}
+
+enum DutyChangeSource {
+  import
+  manual
+}
+
 model User {
   id           String     @id @default(uuid())
   email        String     @unique
@@ -33,9 +44,12 @@ model User {
   avatarUrl    String?    @map("avatar_url")
   createdAt    DateTime   @default(now()) @map("created_at")
 
-  assignments      DutyAssignment[] @relation("AssignedUser")
-  assignmentsMade  DutyAssignment[] @relation("AssignedBy")
-  refreshTokens    RefreshToken[]
+  assignments              DutyAssignment[]       @relation("AssignedUser")
+  assignmentsMade          DutyAssignment[]       @relation("AssignedBy")
+  refreshTokens            RefreshToken[]
+  absences                 UserAbsence[]
+  dutyChangesAsPrevious    DutyAssignmentChange[] @relation("PreviousUser")
+  dutyChangesAsNew         DutyAssignmentChange[] @relation("NewUser")
 
   @@map("users")
 }
@@ -69,4 +83,39 @@ model DutyAssignment {
   @@index([dutyDate])
   @@index([userId, dutyDate])
   @@map("duty_assignments")
+}
+
+model UserAbsence {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  absenceDate DateTime @map("absence_date") @db.Date
+  absenceType String   @map("absence_type")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, absenceDate])
+  @@index([absenceDate])
+  @@map("user_absences")
+}
+
+model DutyAssignmentChange {
+  id             String           @id @default(uuid())
+  dutyDate       DateTime         @map("duty_date") @db.Date
+  section        DutySection
+  office         String
+  previousUserId String?          @map("previous_user_id")
+  newUserId      String?          @map("new_user_id")
+  changeType     DutyChangeType   @map("change_type")
+  source         DutyChangeSource
+  batchId        String           @map("batch_id")
+  createdAt      DateTime         @default(now()) @map("created_at")
+  notifiedAt     DateTime?        @map("notified_at")
+
+  previousUser User? @relation("PreviousUser", fields: [previousUserId], references: [id], onDelete: SetNull)
+  newUser      User? @relation("NewUser", fields: [newUserId], references: [id], onDelete: SetNull)
+
+  @@index([notifiedAt, createdAt])
+  @@index([createdAt])
+  @@map("duty_assignment_changes")
 }

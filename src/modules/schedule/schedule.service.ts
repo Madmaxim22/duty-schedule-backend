@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { DutySection } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import {
@@ -7,6 +8,7 @@ import {
   isValidSlot,
 } from '../../lib/offices.js';
 import { AppError } from '../../lib/errors.js';
+import { recordDutySlotChange } from '../../lib/record-duty-slot-change.js';
 
 function parseDate(dateStr: string): Date {
   const [y, m, d] = dateStr.split('-').map(Number);
@@ -77,14 +79,26 @@ export async function getMonthSchedule(
 ) {
   const { start, end } = monthRange(year, month);
 
-  const assignments = await prisma.dutyAssignment.findMany({
-    where: {
-      dutyDate: { gte: start, lte: end },
-    },
-    include: {
-      user: { select: { id: true, fullName: true } },
-    },
-  });
+  const [assignments, userAbsences] = await Promise.all([
+    prisma.dutyAssignment.findMany({
+      where: {
+        dutyDate: { gte: start, lte: end },
+      },
+      include: {
+        user: { select: { id: true, fullName: true } },
+      },
+    }),
+    prisma.userAbsence.findMany({
+      where: {
+        userId: currentUserId,
+        absenceDate: { gte: start, lte: end },
+      },
+    }),
+  ]);
+
+  const absenceByDate = new Map(
+    userAbsences.map((a) => [formatDate(a.absenceDate), a.absenceType]),
+  );
 
   type DayAccum = {
     isMyDuty: boolean;
@@ -121,10 +135,13 @@ export async function getMonthSchedule(
       (x, y) =>
         x.section.localeCompare(y.section) || x.office.localeCompare(y.office),
     );
+    const absenceType = absenceByDate.get(date);
     return {
       date,
       isMyDuty: accum.isMyDuty,
       duties: accum.duties,
+      isAbsent: absenceType !== undefined,
+      ...(absenceType !== undefined ? { absenceType } : {}),
     };
   });
 
@@ -147,15 +164,27 @@ export async function getMonthSchedule(
   };
 }
 
-export async function getDaySchedule(dateStr: string) {
+export async function getDaySchedule(dateStr: string, currentUserId?: string) {
   const dutyDate = parseDate(dateStr);
 
-  const assignments = await prisma.dutyAssignment.findMany({
-    where: { dutyDate },
-    include: {
-      user: { select: { id: true, fullName: true, avatarUrl: true } },
-    },
-  });
+  const [assignments, myAbsence] = await Promise.all([
+    prisma.dutyAssignment.findMany({
+      where: { dutyDate },
+      include: {
+        user: { select: { id: true, fullName: true, avatarUrl: true } },
+      },
+    }),
+    currentUserId
+      ? prisma.userAbsence.findUnique({
+          where: {
+            userId_absenceDate: {
+              userId: currentUserId,
+              absenceDate: dutyDate,
+            },
+          },
+        })
+      : Promise.resolve(null),
+  ]);
 
   const byKey = new Map(
     assignments.map((a) => [`${a.section}-${a.office}`, a]),
@@ -179,7 +208,12 @@ export async function getDaySchedule(dateStr: string) {
     }
   }
 
-  return { date: dateStr, sections, warnings };
+  return {
+    date: dateStr,
+    sections,
+    warnings,
+    ...(myAbsence ? { myAbsence: { type: myAbsence.absenceType } } : {}),
+  };
 }
 
 export async function putDaySchedule(
@@ -189,6 +223,7 @@ export async function putDaySchedule(
 ) {
   const dutyDate = parseDate(dateStr);
   const expectedSlots = getAllSlots();
+  const batchId = randomUUID();
 
   if (assignments.length !== expectedSlots.length) {
     throw new AppError(400, 'Нужно передать все слоты дня');
@@ -212,6 +247,18 @@ export async function putDaySchedule(
       if (!user) {
         throw new AppError(400, `Пользователь не найден или не подтверждён: ${item.userId}`);
       }
+
+      const absent = await prisma.userAbsence.findUnique({
+        where: {
+          userId_absenceDate: { userId: item.userId, absenceDate: dutyDate },
+        },
+      });
+      if (absent) {
+        throw new AppError(
+          400,
+          `${user.fullName} отсутствует (${absent.absenceType}) ${dateStr}`,
+        );
+      }
     }
   }
 
@@ -221,7 +268,29 @@ export async function putDaySchedule(
     }
   }
 
+  const existingAssignments = await prisma.dutyAssignment.findMany({
+    where: { dutyDate },
+  });
+  const existingByKey = new Map(
+    existingAssignments.map((a) => [`${a.section}-${a.office}`, a]),
+  );
+
   await prisma.$transaction(async (tx) => {
+    for (const item of assignments) {
+      const key = `${item.section}-${item.office}`;
+      const previousUserId = existingByKey.get(key)?.userId ?? null;
+      await recordDutySlotChange({
+        tx,
+        dutyDate,
+        section: item.section as DutySection,
+        office: item.office,
+        previousUserId,
+        newUserId: item.userId,
+        source: 'manual',
+        batchId,
+      });
+    }
+
     await tx.dutyAssignment.deleteMany({ where: { dutyDate } });
 
     const toCreate = assignments
@@ -240,4 +309,54 @@ export async function putDaySchedule(
   });
 
   return getDaySchedule(dateStr);
+}
+
+export async function listDutyAssignmentChanges(limit: number, cursor?: string) {
+  const take = Math.min(Math.max(limit, 1), 100);
+
+  let cursorWhere: object | undefined;
+  if (cursor) {
+    const [createdAtStr, id] = cursor.split('|');
+    if (!createdAtStr || !id) {
+      throw new AppError(400, 'Некорректный cursor');
+    }
+    const createdAt = new Date(createdAtStr);
+    cursorWhere = {
+      OR: [
+        { createdAt: { lt: createdAt } },
+        { AND: [{ createdAt }, { id: { lt: id } }] },
+      ],
+    };
+  }
+
+  const rows = await prisma.dutyAssignmentChange.findMany({
+    take: take + 1,
+    ...(cursorWhere ? { where: cursorWhere } : {}),
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    include: {
+      previousUser: { select: { id: true, fullName: true } },
+      newUser: { select: { id: true, fullName: true } },
+    },
+  });
+
+  const hasMore = rows.length > take;
+  const changes = (hasMore ? rows.slice(0, take) : rows).map((row) => ({
+    id: row.id,
+    dutyDate: formatDate(row.dutyDate),
+    section: row.section,
+    office: row.office,
+    changeType: row.changeType,
+    source: row.source,
+    batchId: row.batchId,
+    createdAt: row.createdAt.toISOString(),
+    notifiedAt: row.notifiedAt?.toISOString() ?? null,
+    previousUser: row.previousUser,
+    newUser: row.newUser,
+  }));
+
+  const last = changes[changes.length - 1];
+  const nextCursor =
+    hasMore && last ? `${last.createdAt}|${last.id}` : null;
+
+  return { changes, nextCursor };
 }

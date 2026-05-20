@@ -176,14 +176,17 @@ curl http://localhost:3000/api/health
 | PATCH | `/admin/users/:id` | Тело: `{ "action": "approve" \| "reject" }` |
 | DELETE | `/admin/users/:id` | Удаление пользователя (не себя и не admin) |
 | GET | `/users` | Список подтверждённых пользователей (для назначений) |
+| GET | `/users?date=YYYY-MM-DD` | То же + флаги отсутствия на дату |
 
 ### Расписание
 
 | Метод | Путь | Описание |
 |-------|------|----------|
-| GET | `/schedule/month?year=2026&month=5` | Все дни месяца: `isMyDuty`, `duties` (все назначенные слоты) |
-| GET | `/schedule/day/:date` | Детали дня (`YYYY-MM-DD`) |
-| PUT | `/schedule/day/:date` | Назначения на день (только admin) |
+| GET | `/schedule/month?year=2026&month=5` | Дни месяца: `isMyDuty`, `duties`, `isAbsent?` |
+| GET | `/schedule/day/:date` | Детали дня (`YYYY-MM-DD`), `myAbsence?` |
+| PUT | `/schedule/day/:date` | Назначения на день (только admin); нельзя назначить отсутствующего |
+| POST | `/schedule/import` | Импорт JSON: `absence` + `info` (только admin) |
+| GET | `/schedule/changes` | Журнал изменений слотов (`limit`, `cursor`) |
 | GET | `/schedule/sections` | Справочник секций и кабинетов |
 
 **Пример PUT** `/schedule/day/2026-05-20`:
@@ -198,6 +201,8 @@ curl http://localhost:3000/api/health
 ```
 
 Нужно передать **все 8 слотов** (4 + 4). `userId: null` — слот пустой.
+
+**Импорт:** `title` в `info` — последние 2 цифры = номер кабинета (`131` → каб. `31`, секция B). Таблицы: `user_absences`, `duty_assignment_changes`.
 
 ### Коды ошибок
 

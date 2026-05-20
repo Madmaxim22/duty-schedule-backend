@@ -5,10 +5,12 @@ import { requireRole } from '../../middleware/requireRole.js';
 import {
   listAllUsers,
   listApprovedUsers,
+  listApprovedUsersForDate,
   listPendingUsers,
   updateUserStatus,
   deleteUser,
 } from './users.service.js';
+import { dateParamSchema } from '../schedule/schedule.schemas.js';
 
 export const usersRouter = Router();
 
@@ -60,9 +62,15 @@ approvedUsersRouter.get(
   '/',
   authenticate,
   requireRole('admin'),
-  async (_req, res, next) => {
+  async (req, res, next) => {
     try {
-      const users = await listApprovedUsers();
+      const date =
+        typeof req.query.date === 'string'
+          ? dateParamSchema.parse(req.query.date)
+          : undefined;
+      const users = date
+        ? await listApprovedUsersForDate(date)
+        : await listApprovedUsers();
       res.json({ users });
     } catch (e) {
       next(e);

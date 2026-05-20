@@ -16,3 +16,34 @@ export const putDaySchema = z.object({
     }),
   ),
 });
+
+export const importScheduleSchema = z.object({
+  replaceFrom: dateParamSchema,
+  replaceTo: dateParamSchema,
+  records: z.array(
+    z.object({
+      fio: z.string().min(1),
+      info: z
+        .array(
+          z.object({
+            fulldate: z.union([dateParamSchema, z.string()]),
+            title: z.union([z.number(), z.string()]),
+          }),
+        )
+        .optional(),
+      absence: z
+        .array(
+          z.object({
+            fulldate: z.union([dateParamSchema, z.string()]),
+            absenceType: z.string().min(1),
+          }),
+        )
+        .optional(),
+    }),
+  ),
+});
+
+export const changesQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).optional().default(50),
+  cursor: z.string().optional(),
+});
