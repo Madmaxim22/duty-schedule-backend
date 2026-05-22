@@ -7,7 +7,14 @@
 sleep 120
 
 set -e
-# OMV — путь проекта на NAS (muhomedyarovma@nas):
-cd /srv/dev-disk-by-uuid-7b779ac5-3f1c-4c5d-98bc-5ed97247f35c/docker_data/duty-schedule/duty-schedule-backend
+BASE=/srv/dev-disk-by-uuid-7b779ac5-3f1c-4c5d-98bc-5ed97247f35c/docker_data
 
+# Nginx Proxy Manager (HTTPS), если установлен
+if [ -f "$BASE/docker/npm/docker-compose.yml" ]; then
+  cd "$BASE/docker/npm"
+  docker compose up -d
+fi
+
+# Duty
+cd "$BASE/duty-schedule/duty-schedule-backend"
 docker compose up -d

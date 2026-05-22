@@ -147,7 +147,7 @@ curl http://localhost:3000/api/health
 | `ADMIN_EMAIL` | Email seed-админа | `admin@duty.local` |
 | `ADMIN_PASSWORD` | Пароль seed-админа | `admin123` |
 | `ADMIN_FULL_NAME` | ФИО админа | `Администратор` |
-| `COOKIE_SECURE` | Secure cookie (HTTPS) | `false` локально, `true` в prod |
+| `COOKIE_SECURE` | Secure cookie (HTTPS) | `false` локально, `true` на NAS (`https://duty-w.ru`) |
 
 Файл `.env` **не коммитьте** в git.
 
@@ -261,6 +261,8 @@ copy .env.example .env
 docker compose up -d --build
 ```
 
+На NAS с HTTPS: см. `.env.production.nas.example`, [docker/npm/](docker/npm/), корневой README → «HTTPS (duty-w.ru)».
+
 Сервисы:
 
 | Сервис | Назначение |
@@ -268,9 +270,9 @@ docker compose up -d --build
 | `db` | PostgreSQL 16 |
 | `api` | Node API + миграции при старте |
 | `web` | Статика frontend (nginx) |
-| `nginx` | Прокси: `/` → web, `/api` → api |
+| `nginx` | Прокси: `/` → web, `/api` → api (`127.0.0.1:8080` на NAS) |
 
-Приложение: **http://localhost** (порт 80).
+Локально: **http://127.0.0.1:8080**. Production: **https://duty-w.ru** через Nginx Proxy Manager.
 
 ## Структура проекта
 
