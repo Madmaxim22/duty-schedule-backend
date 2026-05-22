@@ -38,8 +38,9 @@ services:
 
   nginx:
     image: nginx:alpine
+    container_name: duty-nginx
     restart: unless-stopped
-    # Только localhost NAS — внешний HTTPS через NPM на :443
+    # localhost NAS (curl/отладка); NPM — по сети duty-proxy, см. docker/npm/
     ports:
       - '127.0.0.1:8080:80'
     volumes:
@@ -47,7 +48,14 @@ services:
     depends_on:
       - api
       - web
+    networks:
+      - default
+      - duty-proxy
 
 volumes:
   pgdata:
   uploads:
+
+networks:
+  duty-proxy:
+    external: true

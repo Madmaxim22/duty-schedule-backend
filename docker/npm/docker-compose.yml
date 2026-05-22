@@ -1,9 +1,11 @@
 # Nginx Proxy Manager — reverse proxy + Let's Encrypt для Duty на OMV.
 # Развёртывание на NAS (рядом со стеком Duty):
+#   docker network create duty-proxy   # один раз
 #   cd /srv/.../docker/npm
 #   docker compose up -d
 # Админка: http://<IP_NAS>:81 (не открывать :81 в интернет)
-# Подробности: README.md → «HTTPS через Nginx Proxy Manager (duty-w.ru)»
+# Proxy Host → duty-nginx:80 (не 127.0.0.1:8080 — NPM в отдельном контейнере)
+# Подробности: README.md
 
 services:
   npm:
@@ -16,3 +18,9 @@ services:
     volumes:
       - ./data:/data
       - ./letsencrypt:/etc/letsencrypt
+    networks:
+      - duty-proxy
+
+networks:
+  duty-proxy:
+    external: true
