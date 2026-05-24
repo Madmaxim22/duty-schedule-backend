@@ -13,6 +13,10 @@ import {
   deleteCurrentPhoto,
 } from '../user-photos/user-photos.service.js';
 import { notifyAdminsNewRegistration } from '../push/push.service.js';
+import {
+  dispatchNotification,
+  notifyAdminsUserRegistration,
+} from '../notifications/notifications.dispatch.js';
 
 export async function registerUser(input: {
   email: string;
@@ -39,6 +43,14 @@ export async function registerUser(input: {
     fullName: user.fullName,
     email: user.email,
   }).catch((err) => console.error('[push]', err));
+
+  dispatchNotification(() =>
+    notifyAdminsUserRegistration({
+      id: user.id,
+      fullName: user.fullName,
+      email: user.email,
+    }),
+  );
 
   return toPublicUser(user);
 }

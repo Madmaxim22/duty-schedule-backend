@@ -13,6 +13,7 @@ import { scheduleRouter } from './modules/schedule/schedule.routes.js';
 import { myPhotosRouter } from './modules/user-photos/user-photos.routes.js';
 import { photoLikesRouter } from './modules/photo-likes/photo-likes.routes.js';
 import { pushRouter } from './modules/push/push.routes.js';
+import { notificationsRouter } from './modules/notifications/notifications.routes.js';
 
 export function createApp() {
   const app = express();
@@ -40,6 +41,7 @@ export function createApp() {
   app.use('/api/schedule', scheduleRouter);
   app.use('/api/photos', photoLikesRouter);
   app.use('/api/push', pushRouter);
+  app.use('/api/notifications', notificationsRouter);
 
   app.use(errorHandler);
 

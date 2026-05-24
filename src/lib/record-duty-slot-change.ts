@@ -23,11 +23,11 @@ export type RecordDutySlotChangeInput = {
 
 export async function recordDutySlotChange(
   input: RecordDutySlotChangeInput,
-): Promise<boolean> {
+): Promise<string | null> {
   const changeType = resolveChangeType(input.previousUserId, input.newUserId);
-  if (!changeType) return false;
+  if (!changeType) return null;
 
-  await input.tx.dutyAssignmentChange.create({
+  const change = await input.tx.dutyAssignmentChange.create({
     data: {
       dutyDate: input.dutyDate,
       section: input.section,
@@ -39,5 +39,5 @@ export async function recordDutySlotChange(
       batchId: input.batchId,
     },
   });
-  return true;
+  return change.id;
 }

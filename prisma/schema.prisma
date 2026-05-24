@@ -34,6 +34,12 @@ enum DutyChangeSource {
   manual
 }
 
+enum NotificationType {
+  photo_like
+  duty_change
+  user_registration
+}
+
 model User {
   id              String     @id @default(uuid())
   email           String     @unique
@@ -55,6 +61,8 @@ model User {
   dutyChangesAsNew        DutyAssignmentChange[] @relation("NewUser")
   photoLikesGiven         PhotoLike[]            @relation("PhotoLikesGiven")
   pushSubscriptions       PushSubscription[]
+  notifications           Notification[]         @relation("NotificationRecipient")
+  notificationsActed      Notification[]         @relation("NotificationActor")
 
   @@map("users")
 }
@@ -96,8 +104,9 @@ model PhotoLike {
   createdAt  DateTime  @default(now()) @map("created_at")
   notifiedAt DateTime? @map("notified_at")
 
-  liker User      @relation("PhotoLikesGiven", fields: [likerId], references: [id], onDelete: Cascade)
-  photo UserPhoto @relation(fields: [photoId], references: [id], onDelete: Cascade)
+  liker        User          @relation("PhotoLikesGiven", fields: [likerId], references: [id], onDelete: Cascade)
+  photo        UserPhoto     @relation(fields: [photoId], references: [id], onDelete: Cascade)
+  notification Notification?
 
   @@unique([likerId, photoId])
   @@index([photoId, notifiedAt])
@@ -162,10 +171,34 @@ model DutyAssignmentChange {
   createdAt      DateTime         @default(now()) @map("created_at")
   notifiedAt     DateTime?        @map("notified_at")
 
-  previousUser User? @relation("PreviousUser", fields: [previousUserId], references: [id], onDelete: SetNull)
-  newUser      User? @relation("NewUser", fields: [newUserId], references: [id], onDelete: SetNull)
+  previousUser  User?          @relation("PreviousUser", fields: [previousUserId], references: [id], onDelete: SetNull)
+  newUser       User?          @relation("NewUser", fields: [newUserId], references: [id], onDelete: SetNull)
+  notifications Notification[]
 
   @@index([notifiedAt, createdAt])
   @@index([createdAt])
   @@map("duty_assignment_changes")
+}
+
+model Notification {
+  id                     String           @id @default(uuid())
+  userId                 String           @map("user_id")
+  type                   NotificationType
+  body                   String
+  readAt                 DateTime?        @map("read_at")
+  createdAt              DateTime         @default(now()) @map("created_at")
+  actorUserId            String?          @map("actor_user_id")
+  photoLikeId            String?          @unique @map("photo_like_id")
+  dutyAssignmentChangeId String?          @map("duty_assignment_change_id")
+  payload                Json?
+
+  user                   User                  @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  actor                  User?                 @relation("NotificationActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  photoLike              PhotoLike?            @relation(fields: [photoLikeId], references: [id], onDelete: Cascade)
+  dutyAssignmentChange   DutyAssignmentChange? @relation(fields: [dutyAssignmentChangeId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+  @@index([dutyAssignmentChangeId])
+  @@map("notifications")
 }

@@ -4,6 +4,10 @@ import { prisma } from '../../lib/prisma.js';
 import { matchFioToUserId, buildUserFioIndex } from '../../lib/match-user-by-fio.js';
 import { mapDutyTitle } from '../../lib/map-duty-title.js';
 import { recordDutySlotChange } from '../../lib/record-duty-slot-change.js';
+import {
+  dispatchNotification,
+  notifyDutyAssignmentChange,
+} from '../notifications/notifications.dispatch.js';
 
 function parseDate(dateStr: string): Date {
   const [y, m, d] = dateStr.split('-').map(Number);
@@ -146,6 +150,8 @@ export async function importSchedule(
     }
   }
 
+  const changeIds: string[] = [];
+
   await prisma.$transaction(async (tx) => {
     if (matchedUserIds.size > 0) {
       await tx.userAbsence.deleteMany({
@@ -174,7 +180,7 @@ export async function importSchedule(
 
       const previousUserId = existing?.userId ?? null;
 
-      const recorded = await recordDutySlotChange({
+      const changeId = await recordDutySlotChange({
         tx,
         dutyDate: duty.dutyDate,
         section: duty.section,
@@ -184,7 +190,10 @@ export async function importSchedule(
         source: 'import',
         batchId,
       });
-      if (recorded) changesRecorded += 1;
+      if (changeId) {
+        changesRecorded += 1;
+        changeIds.push(changeId);
+      }
 
       await tx.dutyAssignment.deleteMany({
         where: {
@@ -206,6 +215,10 @@ export async function importSchedule(
       importedDuties += 1;
     }
   });
+
+  for (const changeId of changeIds) {
+    dispatchNotification(() => notifyDutyAssignmentChange(changeId));
+  }
 
   return {
     importedAbsences,

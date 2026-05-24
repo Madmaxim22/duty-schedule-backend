@@ -2,6 +2,10 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { AppError } from '../../lib/errors.js';
 import { getPhotoForViewer } from '../user-photos/user-photos.service.js';
+import {
+  dispatchNotification,
+  notifyPhotoLike,
+} from '../notifications/notifications.dispatch.js';
 
 export type PhotoLikeStatus = {
   likeCount: number;
@@ -59,9 +63,10 @@ export async function likePhoto(
   }
 
   try {
-    await prisma.photoLike.create({
+    const like = await prisma.photoLike.create({
       data: { likerId: currentUserId, photoId },
     });
+    dispatchNotification(() => notifyPhotoLike(like.id));
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
       throw new AppError(409, 'Лайк уже поставлен');

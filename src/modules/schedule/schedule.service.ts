@@ -9,6 +9,10 @@ import {
 } from '../../lib/offices.js';
 import { AppError } from '../../lib/errors.js';
 import { recordDutySlotChange } from '../../lib/record-duty-slot-change.js';
+import {
+  dispatchNotification,
+  notifyDutyAssignmentChange,
+} from '../notifications/notifications.dispatch.js';
 
 function parseDate(dateStr: string): Date {
   const [y, m, d] = dateStr.split('-').map(Number);
@@ -300,11 +304,13 @@ export async function putDaySchedule(
     existingAssignments.map((a) => [`${a.section}-${a.office}`, a]),
   );
 
+  const changeIds: string[] = [];
+
   await prisma.$transaction(async (tx) => {
     for (const item of assignments) {
       const key = `${item.section}-${item.office}`;
       const previousUserId = existingByKey.get(key)?.userId ?? null;
-      await recordDutySlotChange({
+      const changeId = await recordDutySlotChange({
         tx,
         dutyDate,
         section: item.section as DutySection,
@@ -314,6 +320,7 @@ export async function putDaySchedule(
         source: 'manual',
         batchId,
       });
+      if (changeId) changeIds.push(changeId);
     }
 
     await tx.dutyAssignment.deleteMany({ where: { dutyDate } });
@@ -332,6 +339,10 @@ export async function putDaySchedule(
       await tx.dutyAssignment.createMany({ data: toCreate });
     }
   });
+
+  for (const changeId of changeIds) {
+    dispatchNotification(() => notifyDutyAssignmentChange(changeId));
+  }
 
   return getDaySchedule(dateStr);
 }
