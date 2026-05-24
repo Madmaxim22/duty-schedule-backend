@@ -91,7 +91,14 @@ export async function getMonthSchedule(
         dutyDate: { gte: start, lte: end },
       },
       include: {
-        user: { select: { id: true, fullName: true } },
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            avatarUrl: true,
+            currentPhotoId: true,
+          },
+        },
       },
     }),
     prisma.userAbsence.findMany({
@@ -108,7 +115,14 @@ export async function getMonthSchedule(
 
   type DayAccum = {
     isMyDuty: boolean;
-    duties: Array<{ section: 'A' | 'B'; office: string; fullName: string }>;
+    duties: Array<{
+      section: 'A' | 'B';
+      office: string;
+      userId: string;
+      fullName: string;
+      avatarUrl: string | null;
+      currentPhotoId: string | null;
+    }>;
   };
 
   const daysMap = new Map<string, DayAccum>();
@@ -129,7 +143,10 @@ export async function getMonthSchedule(
       existing.duties.push({
         section: a.section,
         office: a.office,
+        userId: a.user.id,
         fullName: a.user.fullName,
+        avatarUrl: a.user.avatarUrl,
+        currentPhotoId: a.user.currentPhotoId,
       });
     }
     daysMap.set(dateKey, existing);

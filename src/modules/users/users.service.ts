@@ -16,6 +16,23 @@ export async function listPendingUsers() {
   });
 }
 
+export async function getApprovedUserProfile(userId: string) {
+  const user = await prisma.user.findFirst({
+    where: { id: userId, status: 'approved' },
+    select: {
+      id: true,
+      fullName: true,
+      role: true,
+      avatarUrl: true,
+      currentPhotoId: true,
+    },
+  });
+  if (!user) {
+    throw new AppError(404, 'Пользователь не найден');
+  }
+  return user;
+}
+
 export async function listApprovedUsers() {
   return prisma.user.findMany({
     where: { status: 'approved' },

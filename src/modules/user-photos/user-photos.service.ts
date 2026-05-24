@@ -59,9 +59,21 @@ function mapPhotoRow(
   };
 }
 
-export async function listMyPhotos(userId: string, viewerId: string) {
+async function assertApprovedPhotoOwner(userId: string) {
+  const owner = await prisma.user.findFirst({
+    where: { id: userId, status: 'approved' },
+    select: { id: true },
+  });
+  if (!owner) {
+    throw new AppError(404, 'Пользователь не найден');
+  }
+}
+
+export async function listUserPhotos(ownerId: string, viewerId: string) {
+  await assertApprovedPhotoOwner(ownerId);
+
   const photos = await prisma.userPhoto.findMany({
-    where: { userId },
+    where: { userId: ownerId },
     orderBy: { createdAt: 'desc' },
   });
 
@@ -75,6 +87,10 @@ export async function listMyPhotos(userId: string, viewerId: string) {
     count: photos.length,
     maxPhotos: MAX_USER_PHOTOS,
   };
+}
+
+export async function listMyPhotos(userId: string, viewerId: string) {
+  return listUserPhotos(userId, viewerId);
 }
 
 async function applyCurrentPhoto(userId: string, photoId: string, url: string) {

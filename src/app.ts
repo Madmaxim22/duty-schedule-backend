@@ -8,6 +8,7 @@ import { errorHandler } from './middleware/errorHandler.js';
 import { authRouter } from './modules/auth/auth.routes.js';
 import { usersRouter } from './modules/users/users.routes.js';
 import { approvedUsersRouter } from './modules/users/users.routes.js';
+import { userProfileRouter } from './modules/users/user-profile.routes.js';
 import { scheduleRouter } from './modules/schedule/schedule.routes.js';
 import { myPhotosRouter } from './modules/user-photos/user-photos.routes.js';
 import { photoLikesRouter } from './modules/photo-likes/photo-likes.routes.js';
@@ -32,8 +33,9 @@ export function createApp() {
 
   app.use('/api/auth', authRouter);
   app.use('/api/admin/users', usersRouter);
-  app.use('/api/users', approvedUsersRouter);
   app.use('/api/users/me/photos', myPhotosRouter);
+  app.use('/api/users', userProfileRouter);
+  app.use('/api/users', approvedUsersRouter);
   app.use('/api/schedule', scheduleRouter);
   app.use('/api/photos', photoLikesRouter);
 
