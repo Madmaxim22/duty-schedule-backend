@@ -8,7 +8,10 @@ import {
 import { AppError } from '../../lib/errors.js';
 import { env } from '../../config/env.js';
 import { toPublicUser } from '../../lib/public-user.js';
-import { removeAvatarFile, saveAvatarFile } from '../../lib/avatar.js';
+import {
+  addPhoto,
+  deleteCurrentPhoto,
+} from '../user-photos/user-photos.service.js';
 
 export async function registerUser(input: {
   email: string;
@@ -111,21 +114,12 @@ export async function getMe(userId: string) {
 }
 
 export async function uploadUserAvatar(userId: string, buffer: Buffer) {
-  const avatarUrl = await saveAvatarFile(userId, buffer);
-  const user = await prisma.user.update({
-    where: { id: userId },
-    data: { avatarUrl },
-  });
-  return toPublicUser(user);
+  const { user } = await addPhoto(userId, buffer, { setAsCurrent: true });
+  return user;
 }
 
 export async function deleteUserAvatar(userId: string) {
-  await removeAvatarFile(userId);
-  const user = await prisma.user.update({
-    where: { id: userId },
-    data: { avatarUrl: null },
-  });
-  return toPublicUser(user);
+  return deleteCurrentPhoto(userId);
 }
 
 export async function seedAdminIfNeeded() {

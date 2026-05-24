@@ -1,6 +1,6 @@
 import { prisma } from '../../lib/prisma.js';
 import { AppError } from '../../lib/errors.js';
-import { removeAvatarFile } from '../../lib/avatar.js';
+import { removeAvatarFile, removePhotoFile } from '../../lib/avatar.js';
 
 export async function listPendingUsers() {
   return prisma.user.findMany({
@@ -115,6 +115,13 @@ export async function deleteUser(userId: string, adminId: string) {
   if (user.id === adminId) throw new AppError(400, 'Нельзя удалить свою учётную запись');
   if (user.role === 'admin') throw new AppError(400, 'Нельзя удалить администратора');
 
+  const photos = await prisma.userPhoto.findMany({
+    where: { userId },
+    select: { id: true },
+  });
+  for (const photo of photos) {
+    await removePhotoFile(photo.id);
+  }
   await removeAvatarFile(userId);
   await prisma.user.delete({ where: { id: userId } });
 }

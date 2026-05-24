@@ -35,23 +35,58 @@ enum DutyChangeSource {
 }
 
 model User {
-  id           String     @id @default(uuid())
-  email        String     @unique
-  passwordHash String     @map("password_hash")
-  fullName     String     @map("full_name")
-  role         UserRole   @default(user)
-  status       UserStatus @default(pending)
-  avatarUrl    String?    @map("avatar_url")
-  createdAt    DateTime   @default(now()) @map("created_at")
+  id              String     @id @default(uuid())
+  email           String     @unique
+  passwordHash    String     @map("password_hash")
+  fullName        String     @map("full_name")
+  role            UserRole   @default(user)
+  status          UserStatus @default(pending)
+  avatarUrl       String?    @map("avatar_url")
+  currentPhotoId  String?    @unique @map("current_photo_id")
+  createdAt       DateTime   @default(now()) @map("created_at")
 
-  assignments              DutyAssignment[]       @relation("AssignedUser")
-  assignmentsMade          DutyAssignment[]       @relation("AssignedBy")
-  refreshTokens            RefreshToken[]
-  absences                 UserAbsence[]
-  dutyChangesAsPrevious    DutyAssignmentChange[] @relation("PreviousUser")
-  dutyChangesAsNew         DutyAssignmentChange[] @relation("NewUser")
+  currentPhoto            UserPhoto?             @relation("CurrentPhoto", fields: [currentPhotoId], references: [id], onDelete: SetNull)
+  photos                  UserPhoto[]            @relation("UserPhotos")
+  assignments             DutyAssignment[]       @relation("AssignedUser")
+  assignmentsMade         DutyAssignment[]       @relation("AssignedBy")
+  refreshTokens           RefreshToken[]
+  absences                UserAbsence[]
+  dutyChangesAsPrevious   DutyAssignmentChange[] @relation("PreviousUser")
+  dutyChangesAsNew        DutyAssignmentChange[] @relation("NewUser")
+  photoLikesGiven         PhotoLike[]            @relation("PhotoLikesGiven")
 
   @@map("users")
+}
+
+model UserPhoto {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  url       String
+  isCurrent Boolean  @default(false) @map("is_current")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user         User        @relation("UserPhotos", fields: [userId], references: [id], onDelete: Cascade)
+  currentUser  User?       @relation("CurrentPhoto")
+  likes        PhotoLike[]
+
+  @@index([userId, isCurrent])
+  @@index([userId, createdAt])
+  @@map("user_photos")
+}
+
+model PhotoLike {
+  id         String    @id @default(uuid())
+  likerId    String    @map("liker_id")
+  photoId    String    @map("photo_id")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  notifiedAt DateTime? @map("notified_at")
+
+  liker User      @relation("PhotoLikesGiven", fields: [likerId], references: [id], onDelete: Cascade)
+  photo UserPhoto @relation(fields: [photoId], references: [id], onDelete: Cascade)
+
+  @@unique([likerId, photoId])
+  @@index([photoId, notifiedAt])
+  @@map("photo_likes")
 }
 
 model RefreshToken {

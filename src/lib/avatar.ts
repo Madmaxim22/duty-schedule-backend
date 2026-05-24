@@ -11,12 +11,21 @@ export function getAvatarRelativePath(userId: string) {
   return `/uploads/avatars/${userId}.webp`;
 }
 
+export function getPhotoRelativePath(photoId: string) {
+  return `/uploads/photos/${photoId}.webp`;
+}
+
 export function getAvatarFilePath(userId: string) {
   return path.join(env.uploadDir, 'avatars', `${userId}.webp`);
 }
 
+export function getPhotoFilePath(photoId: string) {
+  return path.join(env.uploadDir, 'photos', `${photoId}.webp`);
+}
+
 export async function ensureUploadDirs() {
   await mkdir(path.join(env.uploadDir, 'avatars'), { recursive: true });
+  await mkdir(path.join(env.uploadDir, 'photos'), { recursive: true });
 }
 
 export async function processAvatarImage(buffer: Buffer): Promise<Buffer> {
@@ -37,6 +46,7 @@ export async function processAvatarImage(buffer: Buffer): Promise<Buffer> {
   }
 }
 
+/** @deprecated Use savePhotoFile */
 export async function saveAvatarFile(userId: string, buffer: Buffer) {
   const processed = await processAvatarImage(buffer);
   await ensureUploadDirs();
@@ -44,9 +54,25 @@ export async function saveAvatarFile(userId: string, buffer: Buffer) {
   return getAvatarRelativePath(userId);
 }
 
+export async function savePhotoFile(photoId: string, buffer: Buffer) {
+  const processed = await processAvatarImage(buffer);
+  await ensureUploadDirs();
+  await writeFile(getPhotoFilePath(photoId), processed);
+  return getPhotoRelativePath(photoId);
+}
+
+/** @deprecated Legacy single-avatar file */
 export async function removeAvatarFile(userId: string) {
   try {
     await unlink(getAvatarFilePath(userId));
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+  }
+}
+
+export async function removePhotoFile(photoId: string) {
+  try {
+    await unlink(getPhotoFilePath(photoId));
   } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
   }

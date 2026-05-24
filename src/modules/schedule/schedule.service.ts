@@ -54,7 +54,12 @@ function buildSlotResponse(
   section: 'A' | 'B',
   office: string,
   assignment?: {
-    user: { id: string; fullName: string; avatarUrl: string | null } | null;
+    user: {
+      id: string;
+      fullName: string;
+      avatarUrl: string | null;
+      currentPhotoId: string | null;
+    } | null;
   } | null,
 ) {
   return {
@@ -66,6 +71,7 @@ function buildSlotResponse(
           id: assignment.user.id,
           fullName: assignment.user.fullName,
           avatarUrl: assignment.user.avatarUrl,
+          currentPhotoId: assignment.user.currentPhotoId,
         }
       : null,
   };
@@ -171,7 +177,9 @@ export async function getDaySchedule(dateStr: string, currentUserId?: string) {
     prisma.dutyAssignment.findMany({
       where: { dutyDate },
       include: {
-        user: { select: { id: true, fullName: true, avatarUrl: true } },
+        user: {
+          select: { id: true, fullName: true, avatarUrl: true, currentPhotoId: true },
+        },
       },
     }),
     currentUserId

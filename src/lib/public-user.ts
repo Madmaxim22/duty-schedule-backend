@@ -5,6 +5,7 @@ export function toPublicUser(user: {
   role: 'admin' | 'user';
   status: 'pending' | 'approved' | 'rejected';
   avatarUrl: string | null;
+  currentPhotoId: string | null;
 }) {
   return {
     id: user.id,
@@ -13,5 +14,6 @@ export function toPublicUser(user: {
     role: user.role,
     status: user.status,
     avatarUrl: user.avatarUrl,
+    currentPhotoId: user.currentPhotoId,
   };
 }
