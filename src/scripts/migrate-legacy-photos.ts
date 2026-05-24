@@ -1,13 +1,13 @@
 /**
  * One-off: copy uploads/avatars/{userId}.webp → uploads/photos/{photoId}.webp
  * Run after: npx prisma migrate deploy
- * Usage: npx tsx prisma/migrate-legacy-photos.ts
+ * Usage: npm run db:migrate-photos  (node dist/scripts/migrate-legacy-photos.js)
  */
-import { copyFile, access } from 'fs/promises';
+import { access, copyFile } from 'fs/promises';
 import path from 'path';
 import { PrismaClient } from '@prisma/client';
-import { env } from '../src/config/env.js';
-import { getAvatarFilePath, getPhotoFilePath } from '../src/lib/avatar.js';
+import { env } from '../config/env.js';
+import { getAvatarFilePath, getPhotoFilePath } from '../lib/avatar.js';
 
 const prisma = new PrismaClient();
 

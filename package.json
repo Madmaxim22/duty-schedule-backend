@@ -10,7 +10,8 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
-    "db:migrate-photos": "tsx prisma/migrate-legacy-photos.ts",
+    "db:migrate-photos": "node dist/scripts/migrate-legacy-photos.js",
+    "db:migrate-photos:dev": "tsx src/scripts/migrate-legacy-photos.ts",
     "db:seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
