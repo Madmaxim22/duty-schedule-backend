@@ -5,6 +5,9 @@ import {
   formatDutyChangeForAdmin,
   formatDutyChangeForUser,
 } from './notification-messages.js';
+import { sendPushToUser } from '../push/push.service.js';
+
+const PUSH_TITLE = 'График дежурств';
 
 export async function notifyPhotoLike(photoLikeId: string): Promise<void> {
   const like = await prisma.photoLike.findUnique({
@@ -30,6 +33,13 @@ export async function notifyPhotoLike(photoLikeId: string): Promise<void> {
       photoLikeId,
       payload: { photoId: like.photoId },
     },
+  });
+
+  await sendPushToUser(like.photo.userId, {
+    type: 'photo_like',
+    title: PUSH_TITLE,
+    body: `${formatSurnameWithInitials(like.liker.fullName)} оценил(а) ваше фото`,
+    url: '/notifications',
   });
 }
 
@@ -85,6 +95,17 @@ export async function notifyDutyAssignmentChange(changeId: string): Promise<void
 
   if (toCreate.length > 0) {
     await prisma.notification.createMany({ data: toCreate });
+
+    await Promise.all(
+      toCreate.map((item) =>
+        sendPushToUser(item.userId, {
+          type: 'duty_change',
+          title: PUSH_TITLE,
+          body: item.body,
+          url: '/notifications',
+        }),
+      ),
+    );
   }
 }
 

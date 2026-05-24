@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { authenticate, type AuthRequest } from '../../middleware/auth.js';
-import { requireRole } from '../../middleware/requireRole.js';
 import { AppError } from '../../lib/errors.js';
 import {
   getVapidPublicKey,
@@ -31,7 +30,6 @@ pushRouter.post(
   '/subscribe',
   subscribeLimiter,
   authenticate,
-  requireRole('admin'),
   async (req: AuthRequest, res, next) => {
     try {
       if (!isPushEnabled()) {
@@ -49,7 +47,6 @@ pushRouter.post(
 pushRouter.delete(
   '/subscribe',
   authenticate,
-  requireRole('admin'),
   async (req: AuthRequest, res, next) => {
     try {
       const body = unsubscribeSchema.parse(req.body);
