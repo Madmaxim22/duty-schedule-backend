@@ -189,6 +189,12 @@ curl http://localhost:3000/api/health
 | PATCH | `/admin/users/:id` | Тело: `{ "action": "approve" \| "reject" }` |
 | DELETE | `/admin/users/:id` | Удаление пользователя (не себя и не admin) |
 
+### Статистика (admin)
+
+| Метод | Путь | Описание |
+|-------|------|----------|
+| GET | `/admin/statistics?year=2026&month=5` | По каждому `approved` пользователю: число дежурств и отсутствий за календарный месяц и за календарный год; разбивка отсутствий по `absence_type` с датами |
+
 ### Web Push
 
 | Метод | Путь | Доступ | Описание |

@@ -14,6 +14,7 @@ import { myPhotosRouter } from './modules/user-photos/user-photos.routes.js';
 import { photoLikesRouter } from './modules/photo-likes/photo-likes.routes.js';
 import { pushRouter } from './modules/push/push.routes.js';
 import { notificationsRouter } from './modules/notifications/notifications.routes.js';
+import { statisticsRouter } from './modules/statistics/statistics.routes.js';
 
 export function createApp() {
   const app = express();
@@ -35,6 +36,7 @@ export function createApp() {
 
   app.use('/api/auth', authRouter);
   app.use('/api/admin/users', usersRouter);
+  app.use('/api/admin/statistics', statisticsRouter);
   app.use('/api/users/me/photos', myPhotosRouter);
   app.use('/api/users', userProfileRouter);
   app.use('/api/users', approvedUsersRouter);
