@@ -4,7 +4,7 @@ import sharp from 'sharp';
 import { env } from '../config/env.js';
 import { AppError } from './errors.js';
 
-const AVATAR_SIZE = 256;
+const AVATAR_SIZE = 512;
 const WEBP_QUALITY = 80;
 
 export function getAvatarRelativePath(userId: string) {
