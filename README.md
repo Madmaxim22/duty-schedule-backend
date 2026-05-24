@@ -1,5 +1,7 @@
 # График дежурств — Backend
 
+[![GitHub Pages](https://img.shields.io/badge/demo-GitHub%20Pages-blue)](https://madmaxim22.github.io/duty-schedule/)
+
 REST API для мобильного веб-приложения учёта дежурств по кабинетам.
 
 **Расположение в монорепозитории:** `C:\Users\Максим\Documents\Frontend\Duty\duty-schedule-backend`  
@@ -194,6 +196,21 @@ curl http://localhost:3000/api/health
 | Метод | Путь | Описание |
 |-------|------|----------|
 | GET | `/admin/statistics?year=2026&month=5` | По каждому `approved` пользователю: число дежурств и отсутствий за календарный месяц и за календарный год; разбивка отсутствий по `absence_type` с датами |
+
+### Обращения администратору (support)
+
+| Метод | Путь | Доступ | Описание |
+|-------|------|--------|----------|
+| POST | `/support/threads` | approved user | Создать обращение + первое сообщение `{ "body" }` |
+| GET | `/support/threads` | author | Список своих тредов |
+| GET | `/support/threads/:id` | author или admin | Тред и все сообщения |
+| POST | `/support/threads/:id/messages` | author (свой open) или admin (любой open) | Новое сообщение `{ "body" }` |
+| GET | `/admin/support/threads` | admin | Все треды; `?status=open` (по умолчанию) или `closed` |
+| GET | `/admin/support/threads/:id` | admin | Тред и сообщения |
+| POST | `/admin/support/threads/:id/messages` | admin | Ответ в тред |
+| PATCH | `/admin/support/threads/:id` | admin | `{ "status": "closed" }` |
+
+При новом сообщении от пользователя — in-app уведомление и Web Push всем админам (`support_message`). При ответе админа — уведомление автору треда. Лимит: 10 POST на создание/сообщение за 15 мин на пользователя.
 
 ### Web Push
 

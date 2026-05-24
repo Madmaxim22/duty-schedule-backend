@@ -38,6 +38,12 @@ enum NotificationType {
   photo_like
   duty_change
   user_registration
+  support_message
+}
+
+enum SupportThreadStatus {
+  open
+  closed
 }
 
 model User {
@@ -63,6 +69,8 @@ model User {
   pushSubscriptions       PushSubscription[]
   notifications           Notification[]         @relation("NotificationRecipient")
   notificationsActed      Notification[]         @relation("NotificationActor")
+  supportThreadsAuthored    SupportThread[]        @relation("SupportThreadAuthor")
+  supportMessagesAuthored   SupportMessage[]       @relation("SupportMessageAuthor")
 
   @@map("users")
 }
@@ -201,4 +209,33 @@ model Notification {
   @@index([userId, readAt])
   @@index([dutyAssignmentChangeId])
   @@map("notifications")
+}
+
+model SupportThread {
+  id        String              @id @default(uuid())
+  authorId  String              @map("author_id")
+  status    SupportThreadStatus @default(open)
+  createdAt DateTime            @default(now()) @map("created_at")
+  updatedAt DateTime            @updatedAt @map("updated_at")
+
+  author   User             @relation("SupportThreadAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  messages SupportMessage[]
+
+  @@index([authorId, updatedAt])
+  @@index([status, updatedAt])
+  @@map("support_threads")
+}
+
+model SupportMessage {
+  id        String   @id @default(uuid())
+  threadId  String   @map("thread_id")
+  authorId  String   @map("author_id")
+  body      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  thread SupportThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  author User          @relation("SupportMessageAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([threadId, createdAt])
+  @@map("support_messages")
 }

@@ -5,9 +5,16 @@ import {
   formatDutyChangeForAdmin,
   formatDutyChangeForUser,
 } from './notification-messages.js';
-import { sendPushToUser } from '../push/push.service.js';
+import { sendPushToUser, sendPushToUsers } from '../push/push.service.js';
 
 const PUSH_TITLE = 'График дежурств';
+const SUPPORT_PUSH_TITLE = 'Обращение';
+
+function previewMessage(body: string, maxLen = 80): string {
+  const trimmed = body.trim();
+  if (trimmed.length <= maxLen) return trimmed;
+  return `${trimmed.slice(0, maxLen - 1)}…`;
+}
 
 export async function notifyPhotoLike(photoLikeId: string): Promise<void> {
   const like = await prisma.photoLike.findUnique({
@@ -130,6 +137,74 @@ export async function notifyAdminsUserRegistration(newUser: {
       body,
       payload,
     })),
+  });
+}
+
+export async function notifyAdminsSupportMessage(input: {
+  threadId: string;
+  authorId: string;
+  authorFullName: string;
+  body: string;
+}): Promise<void> {
+  const admins = await prisma.user.findMany({
+    where: { role: 'admin', status: 'approved' },
+    select: { id: true },
+  });
+  if (admins.length === 0) return;
+
+  const preview = previewMessage(input.body);
+  const notificationBody = `${formatSurnameWithInitials(input.authorFullName)}: ${preview}`;
+  const payload = { threadId: input.threadId };
+  const pushUrl = `/admin/support/${input.threadId}`;
+
+  await prisma.notification.createMany({
+    data: admins.map((admin) => ({
+      userId: admin.id,
+      type: 'support_message' as const,
+      body: notificationBody,
+      actorUserId: input.authorId,
+      payload,
+    })),
+  });
+
+  await sendPushToUsers(
+    admins.map((a) => a.id),
+    {
+      type: 'support_message',
+      title: SUPPORT_PUSH_TITLE,
+      body: notificationBody,
+      url: pushUrl,
+    },
+  );
+}
+
+export async function notifyUserSupportReply(input: {
+  threadId: string;
+  authorId: string;
+  authorFullName: string;
+  recipientId: string;
+  body: string;
+}): Promise<void> {
+  const preview = previewMessage(input.body);
+  const notificationBody = `Ответ администратора: ${preview}`;
+  const payload = { threadId: input.threadId };
+  const pushUrl = `/support/${input.threadId}`;
+
+  await prisma.notification.create({
+    data: {
+      userId: input.recipientId,
+      type: 'support_message',
+      body: notificationBody,
+      actorUserId: input.authorId,
+      payload,
+    },
+  });
+
+  await sendPushToUser(input.recipientId, {
+    type: 'support_message',
+    title: SUPPORT_PUSH_TITLE,
+    body: notificationBody,
+    url: pushUrl,
   });
 }
 
