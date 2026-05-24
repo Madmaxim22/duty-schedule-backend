@@ -23,6 +23,9 @@ export const env = {
   cookieSecure: process.env.COOKIE_SECURE === 'true',
   uploadDir: process.env.UPLOAD_DIR ?? 'uploads',
   maxAvatarSize: Number(process.env.MAX_AVATAR_SIZE ?? 2_097_152),
+  vapidPublicKey: process.env.VAPID_PUBLIC_KEY ?? '',
+  vapidPrivateKey: process.env.VAPID_PRIVATE_KEY ?? '',
+  vapidSubject: process.env.VAPID_SUBJECT ?? 'mailto:admin@duty.local',
 };
 
 export function assertProductionEnv(): void {

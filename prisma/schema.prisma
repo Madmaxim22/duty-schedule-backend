@@ -54,8 +54,23 @@ model User {
   dutyChangesAsPrevious   DutyAssignmentChange[] @relation("PreviousUser")
   dutyChangesAsNew        DutyAssignmentChange[] @relation("NewUser")
   photoLikesGiven         PhotoLike[]            @relation("PhotoLikesGiven")
+  pushSubscriptions       PushSubscription[]
 
   @@map("users")
+}
+
+model PushSubscription {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_subscriptions")
 }
 
 model UserPhoto {

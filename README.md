@@ -148,8 +148,21 @@ curl http://localhost:3000/api/health
 | `ADMIN_PASSWORD` | Пароль seed-админа | `admin123` |
 | `ADMIN_FULL_NAME` | ФИО админа | `Администратор` |
 | `COOKIE_SECURE` | Secure cookie (HTTPS) | `false` локально, `true` на NAS (`https://duty-w.ru`) |
+| `VAPID_PUBLIC_KEY` | Web Push (публичный ключ) | из `npx web-push generate-vapid-keys` |
+| `VAPID_PRIVATE_KEY` | Web Push (секрет) | не публиковать |
+| `VAPID_SUBJECT` | Web Push contact | `mailto:admin@duty-w.ru` |
 
 Файл `.env` **не коммитьте** в git.
+
+### Web Push (оповещение админа о заявках)
+
+1. Сгенерируйте ключи: `npx web-push generate-vapid-keys` → добавьте в `.env`.
+2. Миграция: `npx prisma migrate deploy`.
+3. На frontend админ включает уведомления на `/admin/users`.
+
+При `POST /auth/register` push уходит всем подписанным пользователям с `role=admin` и `status=approved`. Без VAPID регистрация не ломается.
+
+Подробнее: [корневой README — Web Push](../README.md#web-push-для-администратора).
 
 ## API
 
@@ -175,6 +188,19 @@ curl http://localhost:3000/api/health
 | GET | `/admin/users/pending` | Список заявок на регистрацию |
 | PATCH | `/admin/users/:id` | Тело: `{ "action": "approve" \| "reject" }` |
 | DELETE | `/admin/users/:id` | Удаление пользователя (не себя и не admin) |
+
+### Web Push
+
+| Метод | Путь | Доступ | Описание |
+|-------|------|--------|----------|
+| GET | `/push/vapid-public-key` | публичный | Публичный VAPID (503 без ключей) |
+| POST | `/push/subscribe` | admin | Сохранить подписку |
+| DELETE | `/push/subscribe` | admin | `{ "endpoint" }` — отписаться |
+
+### Пользователи для назначений
+
+| Метод | Путь | Описание |
+|-------|------|----------|
 | GET | `/users` | Список подтверждённых пользователей (для назначений) |
 | GET | `/users?date=YYYY-MM-DD` | То же + флаги отсутствия на дату |
 

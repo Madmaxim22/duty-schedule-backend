@@ -12,6 +12,7 @@ import {
   addPhoto,
   deleteCurrentPhoto,
 } from '../user-photos/user-photos.service.js';
+import { notifyAdminsNewRegistration } from '../push/push.service.js';
 
 export async function registerUser(input: {
   email: string;
@@ -33,6 +34,11 @@ export async function registerUser(input: {
       status: 'pending',
     },
   });
+
+  void notifyAdminsNewRegistration({
+    fullName: user.fullName,
+    email: user.email,
+  }).catch((err) => console.error('[push]', err));
 
   return toPublicUser(user);
 }

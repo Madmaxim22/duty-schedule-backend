@@ -12,6 +12,7 @@ import { userProfileRouter } from './modules/users/user-profile.routes.js';
 import { scheduleRouter } from './modules/schedule/schedule.routes.js';
 import { myPhotosRouter } from './modules/user-photos/user-photos.routes.js';
 import { photoLikesRouter } from './modules/photo-likes/photo-likes.routes.js';
+import { pushRouter } from './modules/push/push.routes.js';
 
 export function createApp() {
   const app = express();
@@ -38,6 +39,7 @@ export function createApp() {
   app.use('/api/users', approvedUsersRouter);
   app.use('/api/schedule', scheduleRouter);
   app.use('/api/photos', photoLikesRouter);
+  app.use('/api/push', pushRouter);
 
   app.use(errorHandler);
 
