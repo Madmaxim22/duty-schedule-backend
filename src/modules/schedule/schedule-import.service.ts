@@ -230,25 +230,23 @@ export async function importSchedule(
         changesRecorded += 1;
         changeIds.push(changeId);
       }
+    }
 
-      if (existing) {
-        await tx.dutyAssignment.delete({
-          where: { id: existing.id },
-        });
-      }
+    await tx.dutyAssignment.deleteMany({
+      where: { dutyDate: { gte: replaceFrom, lte: replaceTo } },
+    });
 
-      if (newUserId) {
-        await tx.dutyAssignment.create({
-          data: {
-            dutyDate,
-            section,
-            office,
-            userId: newUserId,
-            assignedBy: input.adminId,
-          },
-        });
-        importedDuties += 1;
-      }
+    for (const target of targetBySlot.values()) {
+      await tx.dutyAssignment.create({
+        data: {
+          dutyDate: target.dutyDate,
+          section: target.section,
+          office: target.office,
+          userId: target.userId,
+          assignedBy: input.adminId,
+        },
+      });
+      importedDuties += 1;
     }
   });
 
