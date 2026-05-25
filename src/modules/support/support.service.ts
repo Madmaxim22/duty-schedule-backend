@@ -11,6 +11,7 @@ const authorSelect = {
   id: true,
   fullName: true,
   avatarUrl: true,
+  currentPhotoId: true,
   role: true,
 } as const;
 
@@ -18,7 +19,13 @@ function mapMessage(row: {
   id: string;
   body: string;
   createdAt: Date;
-  author: { id: string; fullName: string; avatarUrl: string | null; role: UserRole };
+  author: {
+    id: string;
+    fullName: string;
+    avatarUrl: string | null;
+    currentPhotoId: string | null;
+    role: UserRole;
+  };
 }) {
   return {
     id: row.id,
@@ -28,6 +35,7 @@ function mapMessage(row: {
       id: row.author.id,
       fullName: row.author.fullName,
       avatarUrl: row.author.avatarUrl,
+      currentPhotoId: row.author.currentPhotoId,
       role: row.author.role,
     },
   };
@@ -194,6 +202,7 @@ export async function getThread(
         id: thread.author.id,
         fullName: thread.author.fullName,
         avatarUrl: thread.author.avatarUrl,
+        currentPhotoId: thread.author.currentPhotoId,
         role: thread.author.role,
       },
     },
