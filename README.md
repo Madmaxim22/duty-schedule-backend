@@ -251,7 +251,7 @@ curl http://localhost:3000/api/health
 
 Нужно передать **все 8 слотов** (4 + 4). `userId: null` — слот пустой.
 
-**Импорт:** `title` в `info` — последние 2 цифры = номер кабинета (`131` → каб. `31`, секция B). Таблицы: `user_absences`, `duty_assignment_changes`.
+**Импорт:** `title` в `info` — последние 2 цифры = номер кабинета (`131` → каб. `31`, секция B). В диапазоне `replaceFrom`…`replaceTo` график дежурств совпадает с файлом: назначения вне `info` снимаются. Таблицы: `user_absences`, `duty_assignment_changes`.
 
 ### Коды ошибок
 

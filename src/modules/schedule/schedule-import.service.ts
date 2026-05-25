@@ -22,6 +22,14 @@ function isDateInRange(dateStr: string, from: string, to: string): boolean {
   return dateStr >= from && dateStr <= to;
 }
 
+function slotKey(
+  dateStr: string,
+  section: DutySection,
+  office: string,
+): string {
+  return `${dateStr}|${section}|${office}`;
+}
+
 export type ImportRecord = {
   fio: string;
   info?: Array<{ fulldate: string; title: number | string }>;
@@ -150,6 +158,17 @@ export async function importSchedule(
     }
   }
 
+  const targetBySlot = new Map<string, DutyUpsert>();
+  for (const duty of dutyUpserts) {
+    if (!isDateInRange(duty.dateStr, input.replaceFrom, input.replaceTo)) {
+      continue;
+    }
+    targetBySlot.set(
+      slotKey(duty.dateStr, duty.section, duty.office),
+      duty,
+    );
+  }
+
   const changeIds: string[] = [];
 
   await prisma.$transaction(async (tx) => {
@@ -167,26 +186,43 @@ export async function importSchedule(
       importedAbsences = absenceRows.length;
     }
 
-    for (const duty of dutyUpserts) {
-      const existing = await tx.dutyAssignment.findUnique({
-        where: {
-          dutyDate_section_office: {
-            dutyDate: duty.dutyDate,
-            section: duty.section,
-            office: duty.office,
-          },
-        },
-      });
+    const existingInRange = await tx.dutyAssignment.findMany({
+      where: { dutyDate: { gte: replaceFrom, lte: replaceTo } },
+    });
 
+    const existingBySlot = new Map(
+      existingInRange.map((a) => [
+        slotKey(formatDate(a.dutyDate), a.section, a.office),
+        a,
+      ]),
+    );
+
+    const slotKeys = new Set([
+      ...existingBySlot.keys(),
+      ...targetBySlot.keys(),
+    ]);
+
+    for (const key of slotKeys) {
+      const existing = existingBySlot.get(key);
+      const target = targetBySlot.get(key);
       const previousUserId = existing?.userId ?? null;
+      const newUserId = target?.userId ?? null;
+
+      if (previousUserId === newUserId) {
+        continue;
+      }
+
+      const dutyDate = target?.dutyDate ?? existing!.dutyDate;
+      const section = target?.section ?? existing!.section;
+      const office = target?.office ?? existing!.office;
 
       const changeId = await recordDutySlotChange({
         tx,
-        dutyDate: duty.dutyDate,
-        section: duty.section,
-        office: duty.office,
+        dutyDate,
+        section,
+        office,
         previousUserId,
-        newUserId: duty.userId,
+        newUserId,
         source: 'import',
         batchId,
       });
@@ -195,24 +231,24 @@ export async function importSchedule(
         changeIds.push(changeId);
       }
 
-      await tx.dutyAssignment.deleteMany({
-        where: {
-          dutyDate: duty.dutyDate,
-          section: duty.section,
-          office: duty.office,
-        },
-      });
+      if (existing) {
+        await tx.dutyAssignment.delete({
+          where: { id: existing.id },
+        });
+      }
 
-      await tx.dutyAssignment.create({
-        data: {
-          dutyDate: duty.dutyDate,
-          section: duty.section,
-          office: duty.office,
-          userId: duty.userId,
-          assignedBy: input.adminId,
-        },
-      });
-      importedDuties += 1;
+      if (newUserId) {
+        await tx.dutyAssignment.create({
+          data: {
+            dutyDate,
+            section,
+            office,
+            userId: newUserId,
+            assignedBy: input.adminId,
+          },
+        });
+        importedDuties += 1;
+      }
     }
   });
 
