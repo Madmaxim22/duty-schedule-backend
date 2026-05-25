@@ -13,6 +13,8 @@ type ClientState = {
 };
 
 const roomSubscribers = new Map<string, Set<WebSocket>>();
+/** Все авторизованные сокеты (в т.ч. без subscribe на комнаты — список чатов). */
+const authenticatedSockets = new Set<WebSocket>();
 const socketState = new WeakMap<WebSocket, ClientState>();
 
 function send(ws: WebSocket, msg: ServerMessage): void {
@@ -40,6 +42,7 @@ function removeFromRoom(roomId: string, ws: WebSocket): void {
 }
 
 function removeSocket(ws: WebSocket): void {
+  authenticatedSockets.delete(ws);
   const state = socketState.get(ws);
   if (!state) return;
   for (const roomId of state.subscribedRooms) {
@@ -68,12 +71,9 @@ export function broadcastToUser(userId: string, msg: ServerMessage): void {
 
 function getAllSockets(): Iterable<[WebSocket, ClientState]> {
   const entries: [WebSocket, ClientState][] = [];
-  // WeakMap has no iterator — track via room subscribers
-  for (const set of roomSubscribers.values()) {
-    for (const ws of set) {
-      const state = socketState.get(ws);
-      if (state) entries.push([ws, state]);
-    }
+  for (const ws of authenticatedSockets) {
+    const state = socketState.get(ws);
+    if (state) entries.push([ws, state]);
   }
   return entries;
 }
@@ -91,6 +91,7 @@ async function handleAuth(ws: WebSocket, token: string): Promise<boolean> {
       return false;
     }
     socketState.set(ws, { userId: payload.sub, subscribedRooms: new Set() });
+    authenticatedSockets.add(ws);
     send(ws, { type: 'auth.ok', userId: payload.sub });
     return true;
   } catch {
