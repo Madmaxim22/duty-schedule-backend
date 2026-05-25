@@ -61,6 +61,8 @@ export type PushMessage = {
   title: string;
   body: string;
   url: string;
+  /** Notification tag in the system shade (e.g. per chat room). */
+  tag?: string;
 };
 
 async function deliverPush(subscriptions: Awaited<ReturnType<typeof getSubscriptionsForUserIds>>, payload: PushMessage) {

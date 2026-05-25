@@ -16,6 +16,7 @@ import { pushRouter } from './modules/push/push.routes.js';
 import { notificationsRouter } from './modules/notifications/notifications.routes.js';
 import { statisticsRouter } from './modules/statistics/statistics.routes.js';
 import { adminSupportRouter, supportRouter } from './modules/support/support.routes.js';
+import { chatRouter } from './modules/chat/chat.routes.js';
 
 export function createApp() {
   const app = express();
@@ -40,6 +41,7 @@ export function createApp() {
   app.use('/api/admin/statistics', statisticsRouter);
   app.use('/api/admin/support', adminSupportRouter);
   app.use('/api/support', supportRouter);
+  app.use('/api/chat', chatRouter);
   app.use('/api/users/me/photos', myPhotosRouter);
   app.use('/api/users', userProfileRouter);
   app.use('/api/users', approvedUsersRouter);

@@ -212,6 +212,26 @@ curl http://localhost:3000/api/health
 
 При новом сообщении от пользователя — in-app уведомление и Web Push всем админам (`support_message`). При ответе админа — уведомление автору треда. Лимит: 10 POST на создание/сообщение за 15 мин на пользователя.
 
+### Чат (1:1 и группы)
+
+| Метод | Путь | Доступ | Описание |
+|-------|------|--------|----------|
+| GET | `/chat/contacts` | approved | Список подтверждённых пользователей (для выбора участников) |
+| GET | `/chat/unread-count` | member | Сумма непрочитанных сообщений по всем комнатам |
+| GET | `/chat/rooms` | member | Список комнат с preview и `unreadCount` |
+| POST | `/chat/rooms/direct` | approved | `{ "userId" }` — найти или создать личный чат |
+| POST | `/chat/rooms/group` | approved | `{ "title", "memberIds" }` — группа (создатель входит в состав) |
+| GET | `/chat/rooms/:id` | member | Метаданные и участники |
+| GET | `/chat/rooms/:id/messages` | member | История; `?before=<ISO>&limit=50` |
+| POST | `/chat/rooms/:id/messages` | member | `{ "body" }` — сообщение + broadcast по WebSocket |
+| PATCH | `/chat/rooms/:id/read` | member | Отметить прочитанным (`lastReadAt`) |
+
+**WebSocket:** `ws(s)://<host>/api/ws/chat` — после connect первое сообщение `{ "type": "auth", "token": "<access JWT>" }`, затем `{ "type": "subscribe", "roomIds": ["..."] }`. События: `message.new`, `room.updated`. Отправка сообщений только через REST.
+
+При новом сообщении — Web Push участникам (кроме автора), URL `/chat/:roomId` (тег `chat:{roomId}` в шторке). In-app лента `/notifications` чат не использует. Лимит: 30 POST сообщений / 15 мин на пользователя.
+
+За reverse-proxy (nginx Duty) нужен `Upgrade` для `/api/ws/`; в NPM — включить поддержку WebSockets для Proxy Host.
+
 ### Web Push
 
 | Метод | Путь | Доступ | Описание |

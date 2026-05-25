@@ -46,7 +46,11 @@ export async function listNotifications(userId: string, limit: number, cursor?: 
   }
 
   const rows = await prisma.notification.findMany({
-    where: { userId, ...(cursorWhere ? cursorWhere : {}) },
+    where: {
+      userId,
+      type: { not: 'chat_message' },
+      ...(cursorWhere ? cursorWhere : {}),
+    },
     take: take + 1,
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     include: { actor: { select: actorSelect } },
@@ -62,7 +66,7 @@ export async function listNotifications(userId: string, limit: number, cursor?: 
 
 export async function getUnreadCount(userId: string) {
   const count = await prisma.notification.count({
-    where: { userId, readAt: null },
+    where: { userId, readAt: null, type: { not: 'chat_message' } },
   });
   return { count };
 }

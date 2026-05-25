@@ -208,6 +208,37 @@ export async function notifyUserSupportReply(input: {
   });
 }
 
+const CHAT_PUSH_TITLE = 'Чат';
+
+export async function notifyChatMessage(input: {
+  messageId: string;
+  roomId: string;
+  authorId: string;
+  authorFullName: string;
+  body: string;
+}): Promise<void> {
+  const members = await prisma.chatMember.findMany({
+    where: { roomId: input.roomId, userId: { not: input.authorId } },
+    select: { userId: true },
+  });
+  if (members.length === 0) return;
+
+  const preview = previewMessage(input.body);
+  const notificationBody = `${formatSurnameWithInitials(input.authorFullName)}: ${preview}`;
+  const pushUrl = `/chat/${input.roomId}`;
+
+  await sendPushToUsers(
+    members.map((m) => m.userId),
+    {
+      type: 'chat_message',
+      title: CHAT_PUSH_TITLE,
+      body: notificationBody,
+      url: pushUrl,
+      tag: `chat:${input.roomId}`,
+    },
+  );
+}
+
 export function dispatchNotification(task: () => Promise<void>): void {
   void task().catch((err) => console.error('[notifications]', err));
 }
