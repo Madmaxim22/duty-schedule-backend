@@ -4,6 +4,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { verifyAccessToken } from '../lib/jwt.js';
 import { prisma } from '../lib/prisma.js';
 import type { ClientMessage, ServerMessage } from './chat-ws.types.js';
+import { recordMessageDelivered } from '../modules/chat/chat.service.js';
 
 const WS_PATH = '/api/ws/chat';
 
@@ -164,6 +165,11 @@ function handleClientMessage(ws: WebSocket, raw: string): void {
 
   if (parsed.type === 'typing') {
     void handleTyping(ws, parsed.roomId, parsed.active);
+    return;
+  }
+
+  if (parsed.type === 'message.delivered') {
+    void handleMessageDelivered(ws, parsed.roomId, parsed.messageId);
   }
 }
 
@@ -185,6 +191,16 @@ async function handleTyping(ws: WebSocket, roomId: string, active: boolean): Pro
     { type: 'typing', roomId, userId: state.userId, active: Boolean(active) },
     ws,
   );
+}
+
+async function handleMessageDelivered(ws: WebSocket, roomId: string, messageId: string): Promise<void> {
+  const state = socketState.get(ws);
+  if (!state) {
+    send(ws, { type: 'error', code: 'UNAUTHORIZED', message: 'Сначала выполните auth' });
+    return;
+  }
+
+  await recordMessageDelivered(roomId, messageId, state.userId);
 }
 
 export function attachChatWebSocket(server: Server): void {

@@ -38,7 +38,7 @@ function mapMessage(row: {
     currentPhotoId: string | null;
     role: UserRole;
   };
-}): ChatMessageDto {
+}, status?: 'sent' | 'delivered' | 'read'): ChatMessageDto {
   return {
     id: row.id,
     body: row.body,
@@ -50,7 +50,17 @@ function mapMessage(row: {
       currentPhotoId: row.author.currentPhotoId,
       role: row.author.role,
     },
+    ...(status ? { status } : {}),
   };
+}
+
+function resolveOwnMessageStatus(
+  createdAt: Date,
+  peerLastReadAt: Date | null,
+  isDelivered: boolean,
+): 'sent' | 'delivered' | 'read' {
+  if (peerLastReadAt && peerLastReadAt >= createdAt) return 'read';
+  return isDelivered ? 'delivered' : 'sent';
 }
 
 async function countUnread(
@@ -314,6 +324,7 @@ function mapRoomDetail(
     updatedAt: Date;
     members: Array<{
       userId: string;
+      lastReadAt?: Date | null;
       user: {
         id: string;
         fullName: string;
@@ -348,6 +359,7 @@ function mapRoomDetail(
       avatarUrl: m.user.avatarUrl,
       currentPhotoId: m.user.currentPhotoId,
       role: m.user.role,
+      lastReadAt: m.lastReadAt?.toISOString() ?? null,
     })),
   };
 }
@@ -359,7 +371,11 @@ export async function getRoom(roomId: string, userId: string) {
     where: { id: roomId },
     include: {
       members: {
-        include: { user: { select: { ...contactSelect, role: true } } },
+        select: {
+          userId: true,
+          lastReadAt: true,
+          user: { select: { ...contactSelect, role: true } },
+        },
       },
     },
   });
@@ -390,7 +406,40 @@ export async function getMessages(
     include: { author: { select: authorSelect } },
   });
 
-  const messages = rows.reverse().map(mapMessage);
+  const room = await prisma.chatRoom.findUnique({
+    where: { id: roomId },
+    select: {
+      type: true,
+      members: { select: { userId: true, lastReadAt: true } },
+    },
+  });
+  if (!room) {
+    throw new AppError(404, 'Чат не найден');
+  }
+
+  const peerMember =
+    room.type === 'direct' ? room.members.find((member) => member.userId !== userId) : null;
+  const peerId = peerMember?.userId ?? null;
+  const ownMessageIds = peerId
+    ? rows.filter((row) => row.author.id === userId).map((row) => row.id)
+    : [];
+  const deliveredRows =
+    ownMessageIds.length > 0 && peerId
+      ? await prisma.chatMessageDelivery.findMany({
+          where: { userId: peerId, messageId: { in: ownMessageIds } },
+          select: { messageId: true },
+        })
+      : [];
+  const deliveredIds = new Set(deliveredRows.map((row) => row.messageId));
+
+  const messages = rows.reverse().map((row) =>
+    mapMessage(
+      row,
+      room.type === 'direct' && row.author.id === userId && peerId
+        ? resolveOwnMessageStatus(row.createdAt, peerMember?.lastReadAt ?? null, deliveredIds.has(row.id))
+        : undefined,
+    ),
+  );
   const nextBefore = rows.length === limit ? rows[0]?.createdAt.toISOString() : null;
 
   return { messages, nextBefore };
@@ -399,12 +448,68 @@ export async function getMessages(
 export async function markRoomRead(roomId: string, userId: string) {
   await assertMember(roomId, userId);
 
+  const now = new Date();
   await prisma.chatMember.update({
     where: { roomId_userId: { roomId, userId } },
-    data: { lastReadAt: new Date() },
+    data: { lastReadAt: now },
   });
 
+  const room = await prisma.chatRoom.findUnique({
+    where: { id: roomId },
+    select: { type: true },
+  });
+  if (room?.type === 'direct') {
+    broadcastToRoom(roomId, {
+      type: 'read.updated',
+      roomId,
+      userId,
+      lastReadAt: now.toISOString(),
+    });
+  }
+
   return { ok: true };
+}
+
+export async function recordMessageDelivered(roomId: string, messageId: string, userId: string) {
+  const membership = await prisma.chatMember.findUnique({
+    where: { roomId_userId: { roomId, userId } },
+    select: { roomId: true },
+  });
+  if (!membership) return;
+
+  const message = await prisma.chatMessage.findUnique({
+    where: { id: messageId },
+    select: {
+      id: true,
+      roomId: true,
+      authorId: true,
+      createdAt: true,
+      room: {
+        select: {
+          type: true,
+          members: { select: { userId: true, lastReadAt: true } },
+        },
+      },
+    },
+  });
+  if (!message) return;
+  if (message.roomId !== roomId) return;
+  if (message.authorId === userId) return;
+  if (message.room.type !== 'direct') return;
+
+  await prisma.chatMessageDelivery.upsert({
+    where: { messageId_userId: { messageId, userId } },
+    create: { messageId, userId },
+    update: {},
+  });
+
+  const peerReadAt = message.room.members.find((member) => member.userId === userId)?.lastReadAt ?? null;
+  broadcastToUser(message.authorId, {
+    type: 'message.status',
+    roomId,
+    messageId,
+    status: peerReadAt && peerReadAt >= message.createdAt ? 'read' : 'delivered',
+  });
 }
 
 async function emitRoomUpdates(roomId: string): Promise<void> {
@@ -425,6 +530,13 @@ async function emitRoomUpdates(roomId: string): Promise<void> {
 
 export async function postMessage(roomId: string, authorId: string, body: string) {
   await assertMember(roomId, authorId);
+  const room = await prisma.chatRoom.findUnique({
+    where: { id: roomId },
+    select: { type: true },
+  });
+  if (!room) {
+    throw new AppError(404, 'Чат не найден');
+  }
 
   const author = await prisma.user.findUnique({
     where: { id: authorId },
@@ -453,7 +565,7 @@ export async function postMessage(roomId: string, authorId: string, body: string
     return created;
   });
 
-  const dto = mapMessage(message);
+  const dto = mapMessage(message, room.type === 'direct' ? 'sent' : undefined);
 
   broadcastToRoom(roomId, { type: 'message.new', roomId, message: dto });
   await emitRoomUpdates(roomId);
