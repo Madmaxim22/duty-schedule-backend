@@ -1,7 +1,21 @@
+export type ChatReactionReactorDto = {
+  id: string;
+  fullName: string;
+  avatarUrl: string | null;
+};
+
+export type ChatReactionSummaryDto = {
+  emoji: string;
+  count: number;
+  reactedByMe: boolean;
+  reactors: ChatReactionReactorDto[];
+};
+
 export type ChatMessageDto = {
   id: string;
   body: string;
   createdAt: string;
+  reactions: ChatReactionSummaryDto[];
   status?: 'sent' | 'delivered' | 'read';
   author: {
     id: string;
@@ -35,6 +49,12 @@ export type ServerMessage =
   | { type: 'auth.ok'; userId: string }
   | { type: 'message.new'; roomId: string; message: ChatMessageDto }
   | { type: 'message.status'; roomId: string; messageId: string; status: 'delivered' | 'read' }
+  | {
+      type: 'message.reaction';
+      roomId: string;
+      messageId: string;
+      reactions: ChatReactionSummaryDto[];
+    }
   | { type: 'read.updated'; roomId: string; userId: string; lastReadAt: string }
   | { type: 'room.updated'; room: ChatRoomListItemDto }
   | { type: 'typing'; roomId: string; userId: string; active: boolean }

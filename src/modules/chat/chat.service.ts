@@ -6,7 +6,12 @@ import {
   notifyChatMessage,
 } from '../notifications/notifications.dispatch.js';
 import { broadcastToRoom, broadcastToUser } from '../../ws/chat-ws.server.js';
-import type { ChatMessageDto, ChatRoomListItemDto } from '../../ws/chat-ws.types.js';
+import type {
+  ChatMessageDto,
+  ChatReactionSummaryDto,
+  ChatRoomListItemDto,
+} from '../../ws/chat-ws.types.js';
+import { compareReactionEmojis } from './chat-reactions.constants.js';
 
 const authorSelect = {
   id: true,
@@ -38,11 +43,15 @@ function mapMessage(row: {
     currentPhotoId: string | null;
     role: UserRole;
   };
-}, status?: 'sent' | 'delivered' | 'read'): ChatMessageDto {
+},
+  reactions: ChatReactionSummaryDto[] = [],
+  status?: 'sent' | 'delivered' | 'read',
+): ChatMessageDto {
   return {
     id: row.id,
     body: row.body,
     createdAt: row.createdAt.toISOString(),
+    reactions,
     author: {
       id: row.author.id,
       fullName: row.author.fullName,
@@ -52,6 +61,129 @@ function mapMessage(row: {
     },
     ...(status ? { status } : {}),
   };
+}
+
+type ReactionAggregateEntry = {
+  count: number;
+  reactedByMe: boolean;
+  reactors: ChatReactionSummaryDto['reactors'];
+};
+
+function aggregateReactions(
+  rows: Array<{
+    messageId: string;
+    emoji: string;
+    userId: string;
+    user: { id: string; fullName: string; avatarUrl: string | null };
+  }>,
+  viewerId: string,
+): Map<string, ChatReactionSummaryDto[]> {
+  const byMessage = new Map<string, Map<string, ReactionAggregateEntry>>();
+
+  for (const row of rows) {
+    let emojiMap = byMessage.get(row.messageId);
+    if (!emojiMap) {
+      emojiMap = new Map();
+      byMessage.set(row.messageId, emojiMap);
+    }
+    const entry = emojiMap.get(row.emoji) ?? { count: 0, reactedByMe: false, reactors: [] };
+    if (!entry.reactors.some((reactor) => reactor.id === row.userId)) {
+      entry.reactors.push({
+        id: row.user.id,
+        fullName: row.user.fullName,
+        avatarUrl: row.user.avatarUrl,
+      });
+      entry.count += 1;
+    }
+    if (row.userId === viewerId) entry.reactedByMe = true;
+    emojiMap.set(row.emoji, entry);
+  }
+
+  const result = new Map<string, ChatReactionSummaryDto[]>();
+  for (const [messageId, emojiMap] of byMessage) {
+    const summaries = [...emojiMap.entries()]
+      .map(([emoji, data]) => ({
+        emoji,
+        count: data.count,
+        reactedByMe: data.reactedByMe,
+        reactors: data.reactors,
+      }))
+      .sort((a, b) => {
+        if (b.count !== a.count) return b.count - a.count;
+        return compareReactionEmojis(a.emoji, b.emoji);
+      });
+    result.set(messageId, summaries);
+  }
+  return result;
+}
+
+async function loadReactionsByMessageIds(messageIds: string[], viewerId: string) {
+  if (messageIds.length === 0) return new Map<string, ChatReactionSummaryDto[]>();
+
+  const rows = await prisma.chatMessageReaction.findMany({
+    where: { messageId: { in: messageIds } },
+    select: {
+      messageId: true,
+      emoji: true,
+      userId: true,
+      user: { select: { id: true, fullName: true, avatarUrl: true } },
+    },
+  });
+
+  return aggregateReactions(rows, viewerId);
+}
+
+async function getMessageReactions(messageId: string, viewerId: string) {
+  const map = await loadReactionsByMessageIds([messageId], viewerId);
+  return map.get(messageId) ?? [];
+}
+
+async function assertMessageInRoom(roomId: string, messageId: string) {
+  const message = await prisma.chatMessage.findUnique({
+    where: { id: messageId },
+    select: { id: true, roomId: true },
+  });
+  if (!message || message.roomId !== roomId) {
+    throw new AppError(404, 'Сообщение не найдено');
+  }
+  return message;
+}
+
+function broadcastMessageReactions(roomId: string, messageId: string, reactions: ChatReactionSummaryDto[]) {
+  broadcastToRoom(roomId, { type: 'message.reaction', roomId, messageId, reactions });
+}
+
+export async function setMessageReaction(
+  roomId: string,
+  messageId: string,
+  userId: string,
+  emoji: string,
+) {
+  await assertMember(roomId, userId);
+  await assertMessageInRoom(roomId, messageId);
+
+  await prisma.chatMessageReaction.upsert({
+    where: { messageId_userId: { messageId, userId } },
+    create: { messageId, userId, emoji },
+    update: { emoji },
+  });
+
+  const reactions = await getMessageReactions(messageId, userId);
+  broadcastMessageReactions(roomId, messageId, reactions);
+  return { reactions };
+}
+
+export async function removeMessageReaction(roomId: string, messageId: string, userId: string) {
+  await assertMember(roomId, userId);
+  await assertMessageInRoom(roomId, messageId);
+
+  await prisma.chatMessageReaction.deleteMany({
+    where: { messageId, userId },
+  });
+
+  const reactions = await getMessageReactions(messageId, userId);
+  broadcastMessageReactions(roomId, messageId, reactions);
+  return { reactions };
 }
 
 function resolveOwnMessageStatus(
@@ -431,10 +563,15 @@ export async function getMessages(
         })
       : [];
   const deliveredIds = new Set(deliveredRows.map((row) => row.messageId));
+  const reactionsByMessage = await loadReactionsByMessageIds(
+    rows.map((row) => row.id),
+    userId,
+  );
 
   const messages = rows.reverse().map((row) =>
     mapMessage(
       row,
+      reactionsByMessage.get(row.id) ?? [],
       room.type === 'direct' && row.author.id === userId && peerId
         ? resolveOwnMessageStatus(row.createdAt, peerMember?.lastReadAt ?? null, deliveredIds.has(row.id))
         : undefined,
@@ -565,7 +702,7 @@ export async function postMessage(roomId: string, authorId: string, body: string
     return created;
   });
 
-  const dto = mapMessage(message, room.type === 'direct' ? 'sent' : undefined);
+  const dto = mapMessage(message, [], room.type === 'direct' ? 'sent' : undefined);
 
   broadcastToRoom(roomId, { type: 'message.new', roomId, message: dto });
   await emitRoomUpdates(roomId);

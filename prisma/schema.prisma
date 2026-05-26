@@ -81,6 +81,7 @@ model User {
   chatMemberships           ChatMember[]
   chatMessagesAuthored      ChatMessage[]          @relation("ChatMessageAuthor")
   chatDeliveries            ChatMessageDelivery[]
+  chatMessageReactions      ChatMessageReaction[]
 
   @@map("users")
 }
@@ -302,9 +303,24 @@ model ChatMessage {
   room        ChatRoom                @relation(fields: [roomId], references: [id], onDelete: Cascade)
   author      User                    @relation("ChatMessageAuthor", fields: [authorId], references: [id], onDelete: Cascade)
   deliveries  ChatMessageDelivery[]
+  reactions   ChatMessageReaction[]
 
   @@index([roomId, createdAt])
   @@map("chat_messages")
+}
+
+model ChatMessageReaction {
+  messageId String   @map("message_id")
+  userId    String   @map("user_id")
+  emoji     String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  message ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([messageId, userId])
+  @@index([messageId])
+  @@map("chat_message_reactions")
 }
 
 model ChatMessageDelivery {

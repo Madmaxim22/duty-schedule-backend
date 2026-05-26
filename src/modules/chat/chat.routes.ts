@@ -6,7 +6,9 @@ import {
   createDirectSchema,
   createGroupSchema,
   messageBodySchema,
+  messageIdParamSchema,
   messagesQuerySchema,
+  reactionBodySchema,
   roomIdParamSchema,
 } from './chat.schemas.js';
 import {
@@ -19,6 +21,8 @@ import {
   listMyRooms,
   markRoomRead,
   postMessage,
+  removeMessageReaction,
+  setMessageReaction,
 } from './chat.service.js';
 
 const postLimiter = rateLimit({
@@ -26,6 +30,13 @@ const postLimiter = rateLimit({
   max: 30,
   keyGenerator: (req) => (req as AuthRequest).user?.sub ?? req.ip ?? 'unknown',
   message: { message: 'Слишком много сообщений, попробуйте позже' },
+});
+
+const reactionLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 120,
+  keyGenerator: (req) => (req as AuthRequest).user?.sub ?? req.ip ?? 'unknown',
+  message: { message: 'Слишком много реакций, попробуйте позже' },
 });
 
 export const chatRouter = Router();
@@ -124,3 +135,34 @@ chatRouter.patch('/rooms/:id/read', async (req: AuthRequest, res, next) => {
     next(e);
   }
 });
+
+chatRouter.put(
+  '/rooms/:id/messages/:messageId/reactions',
+  reactionLimiter,
+  async (req: AuthRequest, res, next) => {
+    try {
+      const roomId = roomIdParamSchema.parse(req.params.id);
+      const messageId = messageIdParamSchema.parse(req.params.messageId);
+      const body = reactionBodySchema.parse(req.body);
+      const data = await setMessageReaction(roomId, messageId, req.user!.sub, body.emoji);
+      res.json(data);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+chatRouter.delete(
+  '/rooms/:id/messages/:messageId/reactions',
+  reactionLimiter,
+  async (req: AuthRequest, res, next) => {
+    try {
+      const roomId = roomIdParamSchema.parse(req.params.id);
+      const messageId = messageIdParamSchema.parse(req.params.messageId);
+      const data = await removeMessageReaction(roomId, messageId, req.user!.sub);
+      res.json(data);
+    } catch (e) {
+      next(e);
+    }
+  },
+);

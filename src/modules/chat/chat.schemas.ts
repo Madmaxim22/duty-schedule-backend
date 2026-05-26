@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { CHAT_REACTION_EMOJIS } from './chat-reactions.constants.js';
 
 export const messageBodySchema = z.object({
   body: z
@@ -9,6 +10,17 @@ export const messageBodySchema = z.object({
 });
 
 export const roomIdParamSchema = z.string().uuid();
+
+export const messageIdParamSchema = z.string().uuid();
+
+export const reactionBodySchema = z.object({
+  emoji: z
+    .string()
+    .trim()
+    .refine((value) => CHAT_REACTION_EMOJIS.includes(value as (typeof CHAT_REACTION_EMOJIS)[number]), {
+      message: 'Недопустимая реакция',
+    }),
+});
 
 export const createDirectSchema = z.object({
   userId: z.string().uuid(),
