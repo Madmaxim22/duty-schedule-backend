@@ -8,7 +8,14 @@ import { attachChatWebSocket } from './ws/chat-ws.server.js';
 assertProductionEnv();
 
 const app = createApp();
-const server = createServer(app);
+// Не передавать app в createServer(app): при некоторых прокси upgrade может попасть в «request»,
+// Express ответит 404 до handleUpgrade. Явно пропускаем websocket-handshake в стек Express.
+const server = createServer((req, res) => {
+  if (String(req.headers.upgrade ?? '').toLowerCase() === 'websocket') {
+    return;
+  }
+  app(req, res);
+});
 
 attachChatWebSocket(server);
 

@@ -230,7 +230,7 @@ curl http://localhost:3000/api/health
 
 При новом сообщении — Web Push участникам (кроме автора), URL `/chat/:roomId` (тег `chat:{roomId}` в шторке). In-app лента `/notifications` чат не использует. Лимит: 30 POST сообщений / 15 мин на пользователя.
 
-За reverse-proxy (nginx Duty) нужен `Upgrade` для `/api/ws/`; в NPM — включить поддержку WebSockets для Proxy Host.
+За reverse-proxy (nginx Duty) нужен проброс `Upgrade` / `Connection` до API (в актуальном `nginx/nginx.conf` — и в `location /api/ws/`, и в общем `location /api/`); в NPM — включить поддержку WebSockets для Proxy Host. Ответ Express `Cannot GET /api/ws/chat` означает, что handshake дошёл как обычный GET без upgrade.
 
 ### Web Push
 
