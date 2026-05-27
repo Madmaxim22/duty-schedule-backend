@@ -33,7 +33,18 @@ docker compose up -d
 | Forward Port | `80` |
 | SSL | Request Let's Encrypt, Force SSL |
 
-**Advanced → Custom Nginx Configuration:**
+**Лимит загрузки (413):** в `docker-compose.yml` смонтирован `./custom/server_proxy.conf` → `client_max_body_size 16m` для всех proxy hosts. После копирования compose на NAS:
+
+```bash
+cd /srv/.../docker/npm
+docker compose up -d
+```
+
+Проверка внутри NPM: `docker exec <npm-container> nginx -T 2>/dev/null | grep client_max_body_size`
+
+Только строка в **Advanced** иногда **не работает** (баг/порядок директив NPM). Тогда не полагайтесь на Advanced для лимита — достаточно `server_proxy.conf`.
+
+**Advanced → Custom Nginx Configuration** (заголовки; `client_max_body_size` здесь опционально, если уже есть `server_proxy.conf`):
 
 ```nginx
 proxy_set_header Host $host;
@@ -41,6 +52,8 @@ proxy_set_header X-Real-IP $remote_addr;
 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 proxy_set_header X-Forwarded-Proto $scheme;
 ```
+
+**Duty-nginx** (второй слой): на NAS `git pull` в `duty-schedule-backend` и `docker compose up -d nginx` — в `nginx.conf` тоже должно быть `client_max_body_size 16m;`. Без этого 413 останется, даже если NPM исправлен.
 
 **Trust Upstream Forwarded Proto** — выключить (NPM — крайний прокси).
 

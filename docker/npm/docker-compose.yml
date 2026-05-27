@@ -18,6 +18,8 @@ services:
     volumes:
       - ./data:/data
       - ./letsencrypt:/etc/letsencrypt
+      # Лимит загрузки для всех Proxy Host (фото профиля и т.д.)
+      - ./custom/server_proxy.conf:/data/nginx/custom/server_proxy.conf:ro
     networks:
       - duty-proxy
 
