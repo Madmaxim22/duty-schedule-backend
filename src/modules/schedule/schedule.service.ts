@@ -63,6 +63,8 @@ function buildSlotResponse(
       fullName: string;
       avatarUrl: string | null;
       currentPhotoId: string | null;
+      avatarFocusX: number;
+      avatarFocusY: number;
     } | null;
   } | null,
 ) {
@@ -76,6 +78,8 @@ function buildSlotResponse(
           fullName: assignment.user.fullName,
           avatarUrl: assignment.user.avatarUrl,
           currentPhotoId: assignment.user.currentPhotoId,
+          avatarFocusX: assignment.user.avatarFocusX,
+          avatarFocusY: assignment.user.avatarFocusY,
         }
       : null,
   };
@@ -101,6 +105,8 @@ export async function getMonthSchedule(
             fullName: true,
             avatarUrl: true,
             currentPhotoId: true,
+            avatarFocusX: true,
+            avatarFocusY: true,
           },
         },
       },
@@ -126,6 +132,8 @@ export async function getMonthSchedule(
       fullName: string;
       avatarUrl: string | null;
       currentPhotoId: string | null;
+      avatarFocusX: number;
+      avatarFocusY: number;
     }>;
   };
 
@@ -151,6 +159,8 @@ export async function getMonthSchedule(
         fullName: a.user.fullName,
         avatarUrl: a.user.avatarUrl,
         currentPhotoId: a.user.currentPhotoId,
+        avatarFocusX: a.user.avatarFocusX,
+        avatarFocusY: a.user.avatarFocusY,
       });
     }
     daysMap.set(dateKey, existing);
@@ -199,7 +209,14 @@ export async function getDaySchedule(dateStr: string, currentUserId?: string) {
       where: { dutyDate },
       include: {
         user: {
-          select: { id: true, fullName: true, avatarUrl: true, currentPhotoId: true },
+          select: {
+            id: true,
+            fullName: true,
+            avatarUrl: true,
+            currentPhotoId: true,
+            avatarFocusX: true,
+            avatarFocusY: true,
+          },
         },
       },
     }),

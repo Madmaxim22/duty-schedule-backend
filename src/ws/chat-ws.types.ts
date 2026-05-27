@@ -2,6 +2,8 @@ export type ChatReactionReactorDto = {
   id: string;
   fullName: string;
   avatarUrl: string | null;
+  avatarFocusX: number;
+  avatarFocusY: number;
 };
 
 export type ChatReactionSummaryDto = {
@@ -22,6 +24,8 @@ export type ChatMessageDto = {
     fullName: string;
     avatarUrl: string | null;
     currentPhotoId: string | null;
+    avatarFocusX: number;
+    avatarFocusY: number;
     role: string;
   };
 };
@@ -32,6 +36,8 @@ export type ChatRoomListItemDto = {
   title: string | null;
   displayName: string;
   displayAvatarUrl: string | null;
+  displayAvatarFocusX: number;
+  displayAvatarFocusY: number;
   lastMessagePreview: string | null;
   lastMessageAt: string | null;
   unreadCount: number;

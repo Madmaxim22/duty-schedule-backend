@@ -6,6 +6,8 @@ export function toPublicUser(user: {
   status: 'pending' | 'approved' | 'rejected';
   avatarUrl: string | null;
   currentPhotoId: string | null;
+  avatarFocusX: number;
+  avatarFocusY: number;
 }) {
   return {
     id: user.id,
@@ -15,5 +17,7 @@ export function toPublicUser(user: {
     status: user.status,
     avatarUrl: user.avatarUrl,
     currentPhotoId: user.currentPhotoId,
+    avatarFocusX: user.avatarFocusX,
+    avatarFocusY: user.avatarFocusY,
   };
 }

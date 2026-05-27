@@ -4,7 +4,7 @@ import sharp from 'sharp';
 import { env } from '../config/env.js';
 import { AppError } from './errors.js';
 
-const AVATAR_SIZE = 512;
+const MAX_PHOTO_DIMENSION = 1200;
 const WEBP_QUALITY = 80;
 
 export function getAvatarRelativePath(userId: string) {
@@ -37,7 +37,10 @@ export async function processAvatarImage(buffer: Buffer): Promise<Buffer> {
 
     return sharp(buffer)
       .rotate()
-      .resize(AVATAR_SIZE, AVATAR_SIZE, { fit: 'cover', position: 'centre' })
+      .resize(MAX_PHOTO_DIMENSION, MAX_PHOTO_DIMENSION, {
+        fit: 'inside',
+        withoutEnlargement: true,
+      })
       .webp({ quality: WEBP_QUALITY })
       .toBuffer();
   } catch (err) {

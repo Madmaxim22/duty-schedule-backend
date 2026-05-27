@@ -1,11 +1,8 @@
 import { prisma } from '../../lib/prisma.js';
 import { AppError } from '../../lib/errors.js';
+import { userAvatarMiniSelect } from '../../lib/user-avatar-select.js';
 
-const actorSelect = {
-  id: true,
-  fullName: true,
-  avatarUrl: true,
-} as const;
+const actorSelect = userAvatarMiniSelect;
 
 function mapNotification(row: {
   id: string;
@@ -14,7 +11,13 @@ function mapNotification(row: {
   readAt: Date | null;
   createdAt: Date;
   payload: unknown;
-  actor: { id: string; fullName: string; avatarUrl: string | null } | null;
+  actor: {
+    id: string;
+    fullName: string;
+    avatarUrl: string | null;
+    avatarFocusX: number;
+    avatarFocusY: number;
+  } | null;
 }) {
   return {
     id: row.id,

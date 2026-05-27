@@ -12,21 +12,14 @@ import type {
   ChatRoomListItemDto,
 } from '../../ws/chat-ws.types.js';
 import { compareReactionEmojis } from './chat-reactions.constants.js';
+import { userAvatarMiniSelect, userAvatarPublicSelect } from '../../lib/user-avatar-select.js';
 
 const authorSelect = {
-  id: true,
-  fullName: true,
-  avatarUrl: true,
-  currentPhotoId: true,
+  ...userAvatarPublicSelect,
   role: true,
 } as const;
 
-const contactSelect = {
-  id: true,
-  fullName: true,
-  avatarUrl: true,
-  currentPhotoId: true,
-} as const;
+const contactSelect = userAvatarPublicSelect;
 
 function directKeyIds(a: string, b: string): [string, string] {
   return a < b ? [a, b] : [b, a];
@@ -41,6 +34,8 @@ function mapMessage(row: {
     fullName: string;
     avatarUrl: string | null;
     currentPhotoId: string | null;
+    avatarFocusX: number;
+    avatarFocusY: number;
     role: UserRole;
   };
 },
@@ -57,6 +52,8 @@ function mapMessage(row: {
       fullName: row.author.fullName,
       avatarUrl: row.author.avatarUrl,
       currentPhotoId: row.author.currentPhotoId,
+      avatarFocusX: row.author.avatarFocusX,
+      avatarFocusY: row.author.avatarFocusY,
       role: row.author.role,
     },
     ...(status ? { status } : {}),
@@ -74,7 +71,13 @@ function aggregateReactions(
     messageId: string;
     emoji: string;
     userId: string;
-    user: { id: string; fullName: string; avatarUrl: string | null };
+    user: {
+      id: string;
+      fullName: string;
+      avatarUrl: string | null;
+      avatarFocusX: number;
+      avatarFocusY: number;
+    };
   }>,
   viewerId: string,
 ): Map<string, ChatReactionSummaryDto[]> {
@@ -92,6 +95,8 @@ function aggregateReactions(
         id: row.user.id,
         fullName: row.user.fullName,
         avatarUrl: row.user.avatarUrl,
+        avatarFocusX: row.user.avatarFocusX,
+        avatarFocusY: row.user.avatarFocusY,
       });
       entry.count += 1;
     }
@@ -126,7 +131,7 @@ async function loadReactionsByMessageIds(messageIds: string[], viewerId: string)
       messageId: true,
       emoji: true,
       userId: true,
-      user: { select: { id: true, fullName: true, avatarUrl: true } },
+      user: { select: userAvatarMiniSelect },
     },
   });
 
@@ -215,21 +220,36 @@ function resolveDisplay(
     title: string | null;
     members: Array<{
       userId: string;
-      user: { id: string; fullName: string; avatarUrl: string | null };
+      user: {
+        id: string;
+        fullName: string;
+        avatarUrl: string | null;
+        avatarFocusX: number;
+        avatarFocusY: number;
+      };
     }>;
   },
   viewerId: string,
-): { displayName: string; displayAvatarUrl: string | null } {
+): {
+  displayName: string;
+  displayAvatarUrl: string | null;
+  displayAvatarFocusX: number;
+  displayAvatarFocusY: number;
+} {
   if (room.type === 'group') {
     return {
       displayName: room.title ?? 'Группа',
       displayAvatarUrl: null,
+      displayAvatarFocusX: 50,
+      displayAvatarFocusY: 50,
     };
   }
   const peer = room.members.find((m) => m.userId !== viewerId);
   return {
     displayName: peer?.user.fullName ?? 'Чат',
     displayAvatarUrl: peer?.user.avatarUrl ?? null,
+    displayAvatarFocusX: peer?.user.avatarFocusX ?? 50,
+    displayAvatarFocusY: peer?.user.avatarFocusY ?? 50,
   };
 }
 
@@ -248,7 +268,7 @@ async function buildRoomListItem(
             select: { body: true, createdAt: true },
           },
           members: {
-            include: { user: { select: { id: true, fullName: true, avatarUrl: true } } },
+            include: { user: { select: userAvatarMiniSelect } },
           },
         },
       },
@@ -258,7 +278,8 @@ async function buildRoomListItem(
 
   const { room } = membership;
   const last = room.messages[0];
-  const { displayName, displayAvatarUrl } = resolveDisplay(room, userId);
+  const { displayName, displayAvatarUrl, displayAvatarFocusX, displayAvatarFocusY } =
+    resolveDisplay(room, userId);
   const unreadCount = await countUnread(roomId, userId, membership.lastReadAt);
 
   return {
@@ -267,6 +288,8 @@ async function buildRoomListItem(
     title: room.title,
     displayName,
     displayAvatarUrl,
+    displayAvatarFocusX,
+    displayAvatarFocusY,
     lastMessagePreview: last?.body ?? null,
     lastMessageAt: last?.createdAt.toISOString() ?? null,
     unreadCount,
@@ -287,7 +310,7 @@ async function assertMember(roomId: string, userId: string) {
 async function assertApprovedUser(userId: string) {
   const user = await prisma.user.findFirst({
     where: { id: userId, status: 'approved' },
-    select: { id: true, fullName: true, avatarUrl: true, currentPhotoId: true },
+    select: userAvatarPublicSelect,
   });
   if (!user) {
     throw new AppError(404, 'Пользователь не найден');
@@ -329,7 +352,7 @@ export async function listMyRooms(userId: string) {
             select: { body: true, createdAt: true },
           },
           members: {
-            include: { user: { select: { id: true, fullName: true, avatarUrl: true } } },
+            include: { user: { select: userAvatarMiniSelect } },
           },
         },
       },
@@ -340,7 +363,12 @@ export async function listMyRooms(userId: string) {
   const rooms: ChatRoomListItemDto[] = [];
   for (const m of memberships) {
     const last = m.room.messages[0];
-    const { displayName, displayAvatarUrl } = resolveDisplay(m.room, userId);
+    const {
+      displayName,
+      displayAvatarUrl,
+      displayAvatarFocusX,
+      displayAvatarFocusY,
+    } = resolveDisplay(m.room, userId);
     const unreadCount = await countUnread(m.roomId, userId, m.lastReadAt);
     rooms.push({
       id: m.room.id,
@@ -348,6 +376,8 @@ export async function listMyRooms(userId: string) {
       title: m.room.title,
       displayName,
       displayAvatarUrl,
+      displayAvatarFocusX,
+      displayAvatarFocusY,
       lastMessagePreview: last?.body ?? null,
       lastMessageAt: last?.createdAt.toISOString() ?? null,
       unreadCount,
@@ -462,13 +492,20 @@ function mapRoomDetail(
         fullName: string;
         avatarUrl: string | null;
         currentPhotoId: string | null;
+        avatarFocusX: number;
+        avatarFocusY: number;
         role?: UserRole;
       };
     }>;
   },
   viewerId: string,
 ) {
-  const { displayName, displayAvatarUrl } = resolveDisplay(
+  const {
+    displayName,
+    displayAvatarUrl,
+    displayAvatarFocusX,
+    displayAvatarFocusY,
+  } = resolveDisplay(
     {
       type: room.type,
       title: room.title,
@@ -483,6 +520,8 @@ function mapRoomDetail(
     title: room.title,
     displayName,
     displayAvatarUrl,
+    displayAvatarFocusX,
+    displayAvatarFocusY,
     createdAt: room.createdAt.toISOString(),
     updatedAt: room.updatedAt.toISOString(),
     members: room.members.map((m) => ({
@@ -490,6 +529,8 @@ function mapRoomDetail(
       fullName: m.user.fullName,
       avatarUrl: m.user.avatarUrl,
       currentPhotoId: m.user.currentPhotoId,
+      avatarFocusX: m.user.avatarFocusX,
+      avatarFocusY: m.user.avatarFocusY,
       role: m.user.role,
       lastReadAt: m.lastReadAt?.toISOString() ?? null,
     })),

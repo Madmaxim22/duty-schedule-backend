@@ -25,6 +25,8 @@ export async function getApprovedUserProfile(userId: string) {
       role: true,
       avatarUrl: true,
       currentPhotoId: true,
+      avatarFocusX: true,
+      avatarFocusY: true,
     },
   });
   if (!user) {

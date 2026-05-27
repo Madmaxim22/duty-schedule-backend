@@ -61,6 +61,8 @@ model User {
   status          UserStatus @default(pending)
   avatarUrl       String?    @map("avatar_url")
   currentPhotoId  String?    @unique @map("current_photo_id")
+  avatarFocusX    Int        @default(50) @map("avatar_focus_x")
+  avatarFocusY    Int        @default(50) @map("avatar_focus_y")
   createdAt       DateTime   @default(now()) @map("created_at")
 
   currentPhoto            UserPhoto?             @relation("CurrentPhoto", fields: [currentPhotoId], references: [id], onDelete: SetNull)
@@ -105,6 +107,8 @@ model UserPhoto {
   userId    String   @map("user_id")
   url       String
   isCurrent Boolean  @default(false) @map("is_current")
+  focusX    Int      @default(50) @map("focus_x")
+  focusY    Int      @default(50) @map("focus_y")
   createdAt DateTime @default(now()) @map("created_at")
 
   user         User        @relation("UserPhotos", fields: [userId], references: [id], onDelete: Cascade)

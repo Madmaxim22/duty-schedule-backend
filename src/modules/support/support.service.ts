@@ -6,12 +6,10 @@ import {
   notifyAdminsSupportMessage,
   notifyUserSupportReply,
 } from '../notifications/notifications.dispatch.js';
+import { userAvatarMiniSelect, userAvatarPublicSelect } from '../../lib/user-avatar-select.js';
 
 const authorSelect = {
-  id: true,
-  fullName: true,
-  avatarUrl: true,
-  currentPhotoId: true,
+  ...userAvatarPublicSelect,
   role: true,
 } as const;
 
@@ -24,6 +22,8 @@ function mapMessage(row: {
     fullName: string;
     avatarUrl: string | null;
     currentPhotoId: string | null;
+    avatarFocusX: number;
+    avatarFocusY: number;
     role: UserRole;
   };
 }) {
@@ -36,6 +36,8 @@ function mapMessage(row: {
       fullName: row.author.fullName,
       avatarUrl: row.author.avatarUrl,
       currentPhotoId: row.author.currentPhotoId,
+      avatarFocusX: row.author.avatarFocusX,
+      avatarFocusY: row.author.avatarFocusY,
       role: row.author.role,
     },
   };
@@ -47,7 +49,13 @@ function mapThreadSummary(
     status: string;
     createdAt: Date;
     updatedAt: Date;
-    author: { id: string; fullName: string; avatarUrl: string | null };
+    author: {
+      id: string;
+      fullName: string;
+      avatarUrl: string | null;
+      avatarFocusX: number;
+      avatarFocusY: number;
+    };
     messages: Array<{ body: string; createdAt: Date }>;
   },
 ) {
@@ -61,6 +69,8 @@ function mapThreadSummary(
       id: thread.author.id,
       fullName: thread.author.fullName,
       avatarUrl: thread.author.avatarUrl,
+      avatarFocusX: thread.author.avatarFocusX,
+      avatarFocusY: thread.author.avatarFocusY,
     },
     lastMessagePreview: last?.body ?? null,
     lastMessageAt: last?.createdAt.toISOString() ?? null,
@@ -149,7 +159,7 @@ export async function listMyThreads(authorId: string) {
     where: { authorId },
     orderBy: { updatedAt: 'desc' },
     include: {
-      author: { select: { id: true, fullName: true, avatarUrl: true } },
+      author: { select: userAvatarMiniSelect },
       messages: {
         orderBy: { createdAt: 'desc' },
         take: 1,
@@ -166,7 +176,7 @@ export async function listAdminThreads(status: 'open' | 'closed') {
     where: { status },
     orderBy: { updatedAt: 'desc' },
     include: {
-      author: { select: { id: true, fullName: true, avatarUrl: true } },
+      author: { select: userAvatarMiniSelect },
       messages: {
         orderBy: { createdAt: 'desc' },
         take: 1,
@@ -284,7 +294,7 @@ export async function closeThread(threadId: string) {
     where: { id: threadId },
     data: { status: 'closed' },
     include: {
-      author: { select: { id: true, fullName: true, avatarUrl: true } },
+      author: { select: userAvatarMiniSelect },
     },
   });
 

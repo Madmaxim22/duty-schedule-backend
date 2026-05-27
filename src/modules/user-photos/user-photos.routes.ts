@@ -8,10 +8,12 @@ import {
   deletePhoto,
   listMyPhotos,
   setCurrentPhoto,
+  updatePhotoFocus,
 } from './user-photos.service.js';
 import {
   parseSetAsCurrent,
   photoIdParamSchema,
+  updatePhotoFocusBodySchema,
   uploadPhotoQuerySchema,
 } from './user-photos.schemas.js';
 
@@ -69,6 +71,22 @@ myPhotosRouter.post('/:photoId/set-current', async (req: AuthRequest, res, next)
     const { photoId } = photoIdParamSchema.parse(req.params);
     const user = await setCurrentPhoto(req.user!.sub, photoId);
     res.json({ user });
+  } catch (e) {
+    next(e);
+  }
+});
+
+myPhotosRouter.patch('/:photoId/focus', async (req: AuthRequest, res, next) => {
+  try {
+    const { photoId } = photoIdParamSchema.parse(req.params);
+    const body = updatePhotoFocusBodySchema.parse(req.body);
+    const data = await updatePhotoFocus(
+      req.user!.sub,
+      photoId,
+      body.focusX,
+      body.focusY,
+    );
+    res.json(data);
   } catch (e) {
     next(e);
   }

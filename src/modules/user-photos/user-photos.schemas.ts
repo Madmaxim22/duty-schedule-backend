@@ -11,3 +11,8 @@ export const uploadPhotoQuerySchema = z.object({
 export function parseSetAsCurrent(query: z.infer<typeof uploadPhotoQuerySchema>): boolean {
   return query.setAsCurrent !== 'false';
 }
+
+export const updatePhotoFocusBodySchema = z.object({
+  focusX: z.number().min(0).max(100),
+  focusY: z.number().min(0).max(100),
+});

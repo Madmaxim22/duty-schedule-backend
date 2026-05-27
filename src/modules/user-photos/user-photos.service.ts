@@ -9,6 +9,8 @@ export type PhotoListItem = {
   id: string;
   url: string;
   isCurrent: boolean;
+  focusX: number;
+  focusY: number;
   createdAt: string;
   likeCount: number;
   likedByMe: boolean;
@@ -46,13 +48,22 @@ async function getLikeMetaForPhotos(photoIds: string[], viewerId: string) {
 }
 
 function mapPhotoRow(
-  photo: { id: string; url: string; isCurrent: boolean; createdAt: Date },
+  photo: {
+    id: string;
+    url: string;
+    isCurrent: boolean;
+    focusX: number;
+    focusY: number;
+    createdAt: Date;
+  },
   meta: { likeCount: number; likedByMe: boolean },
 ): PhotoListItem {
   return {
     id: photo.id,
     url: photo.url,
     isCurrent: photo.isCurrent,
+    focusX: photo.focusX,
+    focusY: photo.focusY,
     createdAt: photo.createdAt.toISOString(),
     likeCount: meta.likeCount,
     likedByMe: meta.likedByMe,
@@ -93,19 +104,27 @@ export async function listMyPhotos(userId: string, viewerId: string) {
   return listUserPhotos(userId, viewerId);
 }
 
-async function applyCurrentPhoto(userId: string, photoId: string, url: string) {
+async function applyCurrentPhoto(
+  userId: string,
+  photo: { id: string; url: string; focusX: number; focusY: number },
+) {
   await prisma.$transaction([
     prisma.userPhoto.updateMany({
       where: { userId, isCurrent: true },
       data: { isCurrent: false },
     }),
     prisma.userPhoto.update({
-      where: { id: photoId },
+      where: { id: photo.id },
       data: { isCurrent: true },
     }),
     prisma.user.update({
       where: { id: userId },
-      data: { currentPhotoId: photoId, avatarUrl: url },
+      data: {
+        currentPhotoId: photo.id,
+        avatarUrl: photo.url,
+        avatarFocusX: photo.focusX,
+        avatarFocusY: photo.focusY,
+      },
     }),
   ]);
 }
@@ -131,7 +150,7 @@ export async function addPhoto(
 
   const shouldBeCurrent = setAsCurrent || !hasCurrent;
 
-  await prisma.userPhoto.create({
+  const created = await prisma.userPhoto.create({
     data: {
       id: photoId,
       userId,
@@ -141,19 +160,12 @@ export async function addPhoto(
   });
 
   if (shouldBeCurrent) {
-    await applyCurrentPhoto(userId, photoId, url);
+    await applyCurrentPhoto(userId, created);
   }
 
   const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
   return {
-    photo: {
-      id: photoId,
-      url,
-      isCurrent: shouldBeCurrent,
-      createdAt: new Date().toISOString(),
-      likeCount: 0,
-      likedByMe: false,
-    },
+    photo: mapPhotoRow(created, { likeCount: 0, likedByMe: false }),
     user: toPublicUser(user),
   };
 }
@@ -166,10 +178,49 @@ export async function setCurrentPhoto(userId: string, photoId: string) {
     throw new AppError(404, 'Фото не найдено');
   }
 
-  await applyCurrentPhoto(userId, photo.id, photo.url);
+  await applyCurrentPhoto(userId, photo);
 
   const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
   return toPublicUser(user);
+}
+
+export async function updatePhotoFocus(
+  userId: string,
+  photoId: string,
+  focusX: number,
+  focusY: number,
+) {
+  const photo = await prisma.userPhoto.findFirst({
+    where: { id: photoId, userId },
+  });
+  if (!photo) {
+    throw new AppError(404, 'Фото не найдено');
+  }
+
+  const updated = await prisma.userPhoto.update({
+    where: { id: photoId },
+    data: {
+      focusX: Math.round(focusX),
+      focusY: Math.round(focusY),
+    },
+  });
+
+  if (photo.isCurrent) {
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        avatarFocusX: updated.focusX,
+        avatarFocusY: updated.focusY,
+      },
+    });
+  }
+
+  const meta = await getLikeMetaForPhotos([photoId], userId);
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+  return {
+    photo: mapPhotoRow(updated, meta.get(photoId)!),
+    user: toPublicUser(user),
+  };
 }
 
 export async function deletePhoto(userId: string, photoId: string) {
@@ -192,11 +243,16 @@ export async function deletePhoto(userId: string, photoId: string) {
     });
 
     if (next) {
-      await applyCurrentPhoto(userId, next.id, next.url);
+      await applyCurrentPhoto(userId, next);
     } else {
       await prisma.user.update({
         where: { id: userId },
-        data: { currentPhotoId: null, avatarUrl: null },
+        data: {
+          currentPhotoId: null,
+          avatarUrl: null,
+          avatarFocusX: 50,
+          avatarFocusY: 50,
+        },
       });
     }
   }
