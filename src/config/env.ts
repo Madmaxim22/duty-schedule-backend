@@ -22,7 +22,7 @@ export const env = {
   adminFullName: process.env.ADMIN_FULL_NAME ?? 'Администратор',
   cookieSecure: process.env.COOKIE_SECURE === 'true',
   uploadDir: process.env.UPLOAD_DIR ?? 'uploads',
-  maxAvatarSize: Number(process.env.MAX_AVATAR_SIZE ?? 2_097_152),
+  maxAvatarSize: Number(process.env.MAX_AVATAR_SIZE ?? 15_728_640),
   vapidPublicKey: process.env.VAPID_PUBLIC_KEY ?? '',
   vapidPrivateKey: process.env.VAPID_PRIVATE_KEY ?? '',
   vapidSubject: process.env.VAPID_SUBJECT ?? 'mailto:admin@duty.local',
