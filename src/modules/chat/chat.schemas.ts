@@ -1,14 +1,23 @@
 import { z } from 'zod';
 import { CHAT_REACTION_EMOJIS } from './chat-reactions.constants.js';
 
-export const messageBodySchema = z.object({
-  body: z
-    .string()
-    .trim()
-    .min(1, 'Сообщение не может быть пустым')
-    .max(2000, 'Сообщение не длиннее 2000 символов'),
-  replyToMessageId: z.string().uuid().optional(),
-});
+export const messageBodySchema = z
+  .object({
+    body: z.string().trim().max(2000, 'Сообщение не длиннее 2000 символов').default(''),
+    replyToMessageId: z.string().uuid().optional(),
+    attachmentIds: z.array(z.string().uuid()).max(10).optional(),
+  })
+  .superRefine((data, ctx) => {
+    const hasBody = data.body.length > 0;
+    const hasAttachments = (data.attachmentIds?.length ?? 0) > 0;
+    if (!hasBody && !hasAttachments) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Укажите текст сообщения или прикрепите изображение',
+        path: ['body'],
+      });
+    }
+  });
 
 export const roomIdParamSchema = z.string().uuid();
 

@@ -81,9 +81,10 @@ model User {
   supportMessagesAuthored   SupportMessage[]       @relation("SupportMessageAuthor")
   chatRoomsCreated          ChatRoom[]             @relation("ChatRoomCreator")
   chatMemberships           ChatMember[]
-  chatMessagesAuthored      ChatMessage[]          @relation("ChatMessageAuthor")
+  chatMessagesAuthored      ChatMessage[]             @relation("ChatMessageAuthor")
   chatDeliveries            ChatMessageDelivery[]
   chatMessageReactions      ChatMessageReaction[]
+  chatAttachmentsUploaded   ChatMessageAttachment[]   @relation("ChatAttachmentUploader")
 
   @@map("users")
 }
@@ -264,9 +265,10 @@ model ChatRoom {
   updatedAt DateTime     @updatedAt @map("updated_at")
 
   creator   User           @relation("ChatRoomCreator", fields: [createdBy], references: [id], onDelete: Cascade)
-  members   ChatMember[]
-  messages  ChatMessage[]
-  directKey ChatDirectKey?
+  members     ChatMember[]
+  messages    ChatMessage[]
+  attachments ChatMessageAttachment[]
+  directKey   ChatDirectKey?
 
   @@index([updatedAt])
   @@map("chat_rooms")
@@ -311,10 +313,34 @@ model ChatMessage {
   replies     ChatMessage[]           @relation("ChatMessageReply")
   deliveries  ChatMessageDelivery[]
   reactions   ChatMessageReaction[]
+  attachments ChatMessageAttachment[]
 
   @@index([roomId, createdAt])
   @@index([replyToMessageId])
   @@map("chat_messages")
+}
+
+model ChatMessageAttachment {
+  id         String   @id @default(uuid())
+  roomId     String   @map("room_id")
+  uploaderId String   @map("uploader_id")
+  messageId  String?  @map("message_id")
+  fileName   String   @map("file_name")
+  mimeType   String   @map("mime_type")
+  size       Int
+  width      Int?
+  height     Int?
+  url        String
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  room     ChatRoom     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  uploader User         @relation("ChatAttachmentUploader", fields: [uploaderId], references: [id], onDelete: Cascade)
+  message  ChatMessage? @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@index([roomId, uploaderId, messageId])
+  @@index([messageId, createdAt])
+  @@map("chat_message_attachments")
 }
 
 model ChatMessageReaction {

@@ -1,4 +1,12 @@
+import { randomUUID } from 'crypto';
 import type { ChatRoomType, UserRole } from '@prisma/client';
+import { env } from '../../config/env.js';
+import {
+  extensionFromUrl,
+  removeChatAttachmentFile,
+  sanitizeChatFileName,
+  saveChatAttachmentImage,
+} from '../../lib/chat-attachments.js';
 import { prisma } from '../../lib/prisma.js';
 import { AppError } from '../../lib/errors.js';
 import {
@@ -7,6 +15,7 @@ import {
 } from '../notifications/notifications.dispatch.js';
 import { broadcastToRoom, broadcastToUser } from '../../ws/chat-ws.server.js';
 import type {
+  ChatAttachmentDto,
   ChatMessageDto,
   ChatMessageReplyToDto,
   ChatReactionSummaryDto,
@@ -30,10 +39,45 @@ const replyToSelect = {
   author: { select: { id: true, fullName: true } },
 } as const;
 
+const attachmentSelect = {
+  id: true,
+  fileName: true,
+  mimeType: true,
+  size: true,
+  width: true,
+  height: true,
+  url: true,
+} as const;
+
 const messageInclude = {
   author: { select: authorSelect },
   replyTo: { select: replyToSelect },
+  attachments: { orderBy: { createdAt: 'asc' as const }, select: attachmentSelect },
 } as const;
+
+function mapAttachment(row: {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  width: number | null;
+  height: number | null;
+  url: string;
+}): ChatAttachmentDto {
+  return {
+    id: row.id,
+    fileName: row.fileName,
+    mimeType: row.mimeType,
+    size: row.size,
+    ...(row.width != null && row.height != null ? { width: row.width, height: row.height } : {}),
+    url: row.url,
+  };
+}
+
+function replyQuoteBody(body: string): string {
+  const trimmed = body.trim();
+  return trimmed.length > 0 ? truncateReplyBody(trimmed) : 'Фото';
+}
 
 function directKeyIds(a: string, b: string): [string, string] {
   return a < b ? [a, b] : [b, a];
@@ -42,6 +86,17 @@ function directKeyIds(a: string, b: string): [string, string] {
 function truncateReplyBody(body: string, max = REPLY_BODY_MAX): string {
   if (body.length <= max) return body;
   return `${body.slice(0, max - 1)}…`;
+}
+
+type LastMessagePreviewSource = {
+  body: string;
+  replyToMessageId: string | null;
+  attachments: { id: string }[];
+};
+
+function formatLastMessagePreview(last: LastMessagePreviewSource): string {
+  const base = last.body.trim() || (last.attachments.length > 0 ? 'Фото' : '');
+  return last.replyToMessageId ? `↩ ${truncateReplyBody(base)}` : base;
 }
 
 function mapReplyTo(
@@ -54,7 +109,7 @@ function mapReplyTo(
   if (!replyTo) return undefined;
   return {
     id: replyTo.id,
-    body: truncateReplyBody(replyTo.body),
+    body: replyQuoteBody(replyTo.body),
     author: { id: replyTo.author.id, fullName: replyTo.author.fullName },
   };
 }
@@ -77,16 +132,27 @@ function mapMessage(row: {
     body: string;
     author: { id: string; fullName: string };
   } | null;
+  attachments?: Array<{
+    id: string;
+    fileName: string;
+    mimeType: string;
+    size: number;
+    width: number | null;
+    height: number | null;
+    url: string;
+  }>;
 },
   reactions: ChatReactionSummaryDto[] = [],
   status?: 'sent' | 'delivered' | 'read',
 ): ChatMessageDto {
   const replyTo = mapReplyTo(row.replyTo);
+  const attachments = row.attachments?.map(mapAttachment);
   return {
     id: row.id,
     body: row.body,
     createdAt: row.createdAt.toISOString(),
     reactions,
+    ...(attachments && attachments.length > 0 ? { attachments } : {}),
     author: {
       id: row.author.id,
       fullName: row.author.fullName,
@@ -306,7 +372,12 @@ async function buildRoomListItem(
           messages: {
             orderBy: { createdAt: 'desc' },
             take: 1,
-            select: { body: true, createdAt: true, replyToMessageId: true },
+            select: {
+              body: true,
+              createdAt: true,
+              replyToMessageId: true,
+              attachments: { take: 1, select: { id: true } },
+            },
           },
           members: {
             include: { user: { select: userAvatarMiniSelect } },
@@ -331,11 +402,7 @@ async function buildRoomListItem(
     displayAvatarUrl,
     displayAvatarFocusX,
     displayAvatarFocusY,
-    lastMessagePreview: last
-      ? last.replyToMessageId
-        ? `↩ ${truncateReplyBody(last.body)}`
-        : last.body
-      : null,
+    lastMessagePreview: last ? formatLastMessagePreview(last) : null,
     lastMessageAt: last?.createdAt.toISOString() ?? null,
     unreadCount,
     updatedAt: room.updatedAt.toISOString(),
@@ -350,6 +417,38 @@ async function assertMember(roomId: string, userId: string) {
     throw new AppError(403, 'Нет доступа к этому чату');
   }
   return member;
+}
+
+async function assertAttachmentsLinkable(
+  ids: string[],
+  roomId: string,
+  uploaderId: string,
+): Promise<void> {
+  if (ids.length === 0) return;
+
+  const cutoff = new Date(Date.now() - env.chatAttachmentOrphanTtlMs);
+  const rows = await prisma.chatMessageAttachment.findMany({
+    where: { id: { in: ids } },
+  });
+
+  if (rows.length !== ids.length) {
+    throw new AppError(400, 'Некорректные вложения');
+  }
+
+  for (const row of rows) {
+    if (row.roomId !== roomId) {
+      throw new AppError(403, 'Вложение из другого чата');
+    }
+    if (row.uploaderId !== uploaderId) {
+      throw new AppError(403, 'Нельзя использовать чужие вложения');
+    }
+    if (row.messageId !== null) {
+      throw new AppError(400, 'Вложение уже привязано к сообщению');
+    }
+    if (row.createdAt < cutoff) {
+      throw new AppError(400, 'Срок действия вложения истёк, загрузите снова');
+    }
+  }
 }
 
 async function assertApprovedUser(userId: string) {
@@ -394,7 +493,12 @@ export async function listMyRooms(userId: string) {
           messages: {
             orderBy: { createdAt: 'desc' },
             take: 1,
-            select: { body: true, createdAt: true, replyToMessageId: true },
+            select: {
+              body: true,
+              createdAt: true,
+              replyToMessageId: true,
+              attachments: { take: 1, select: { id: true } },
+            },
           },
           members: {
             include: { user: { select: userAvatarMiniSelect } },
@@ -423,11 +527,7 @@ export async function listMyRooms(userId: string) {
       displayAvatarUrl,
       displayAvatarFocusX,
       displayAvatarFocusY,
-      lastMessagePreview: last
-      ? last.replyToMessageId
-        ? `↩ ${truncateReplyBody(last.body)}`
-        : last.body
-      : null,
+      lastMessagePreview: last ? formatLastMessagePreview(last) : null,
       lastMessageAt: last?.createdAt.toISOString() ?? null,
       unreadCount,
       updatedAt: m.room.updatedAt.toISOString(),
@@ -755,11 +855,62 @@ async function emitRoomUpdates(roomId: string): Promise<void> {
   );
 }
 
+export async function uploadRoomAttachments(
+  roomId: string,
+  uploaderId: string,
+  files: Express.Multer.File[],
+) {
+  await assertMember(roomId, uploaderId);
+
+  if (!files.length) {
+    throw new AppError(400, 'Не выбраны файлы');
+  }
+  if (files.length > env.maxChatAttachmentsPerMessage) {
+    throw new AppError(
+      400,
+      `Можно прикрепить не более ${env.maxChatAttachmentsPerMessage} файлов`,
+    );
+  }
+
+  const attachments: ChatAttachmentDto[] = [];
+
+  for (const file of files) {
+    const id = randomUUID();
+    try {
+      const saved = await saveChatAttachmentImage(id, file.buffer, file.mimetype);
+      const row = await prisma.chatMessageAttachment.create({
+        data: {
+          id,
+          roomId,
+          uploaderId,
+          fileName: sanitizeChatFileName(file.originalname),
+          mimeType: saved.mimeType,
+          size: saved.size,
+          width: saved.width,
+          height: saved.height,
+          url: saved.url,
+        },
+        select: attachmentSelect,
+      });
+      attachments.push(mapAttachment(row));
+    } catch (err) {
+      await removeChatAttachmentFile(id, 'webp').catch(() => undefined);
+      await removeChatAttachmentFile(id, 'gif').catch(() => undefined);
+      await removeChatAttachmentFile(id, 'png').catch(() => undefined);
+      await removeChatAttachmentFile(id, 'jpg').catch(() => undefined);
+      throw err;
+    }
+  }
+
+  return { attachments };
+}
+
 export async function postMessage(
   roomId: string,
   authorId: string,
   body: string,
   replyToMessageId?: string,
+  attachmentIds?: string[],
 ) {
   await assertMember(roomId, authorId);
   const room = await prisma.chatRoom.findUnique({
@@ -769,6 +920,9 @@ export async function postMessage(
   if (!room) {
     throw new AppError(404, 'Чат не найден');
   }
+
+  const ids = attachmentIds ?? [];
+  await assertAttachmentsLinkable(ids, roomId, authorId);
 
   if (replyToMessageId) {
     const target = await prisma.chatMessage.findUnique({
@@ -794,8 +948,22 @@ export async function postMessage(
   const message = await prisma.$transaction(async (tx) => {
     const created = await tx.chatMessage.create({
       data: { roomId, authorId, body, replyToMessageId: replyToMessageId ?? null },
-      include: messageInclude,
     });
+
+    if (ids.length > 0) {
+      const linked = await tx.chatMessageAttachment.updateMany({
+        where: {
+          id: { in: ids },
+          roomId,
+          uploaderId: authorId,
+          messageId: null,
+        },
+        data: { messageId: created.id },
+      });
+      if (linked.count !== ids.length) {
+        throw new AppError(400, 'Не удалось привязать вложения');
+      }
+    }
 
     await tx.chatRoom.update({
       where: { id: roomId },
@@ -807,7 +975,10 @@ export async function postMessage(
       data: { lastReadAt: new Date() },
     });
 
-    return created;
+    return tx.chatMessage.findUniqueOrThrow({
+      where: { id: created.id },
+      include: messageInclude,
+    });
   });
 
   const dto = mapMessage(message, [], room.type === 'direct' ? 'sent' : undefined);
@@ -822,6 +993,7 @@ export async function postMessage(
       authorId: author.id,
       authorFullName: author.fullName,
       body,
+      hasAttachments: (message.attachments?.length ?? 0) > 0,
     }),
   );
 

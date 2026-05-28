@@ -19,11 +19,22 @@ export type ChatMessageReplyToDto = {
   author: { id: string; fullName: string };
 };
 
+export type ChatAttachmentDto = {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  width?: number;
+  height?: number;
+  url: string;
+};
+
 export type ChatMessageDto = {
   id: string;
   body: string;
   createdAt: string;
   reactions: ChatReactionSummaryDto[];
+  attachments?: ChatAttachmentDto[];
   replyTo?: ChatMessageReplyToDto;
   status?: 'sent' | 'delivered' | 'read';
   author: {

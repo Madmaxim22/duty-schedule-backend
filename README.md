@@ -153,6 +153,9 @@ curl http://localhost:3000/api/health
 | `VAPID_PUBLIC_KEY` | Web Push (публичный ключ) | из `npx web-push generate-vapid-keys` |
 | `VAPID_PRIVATE_KEY` | Web Push (секрет) | не публиковать |
 | `VAPID_SUBJECT` | Web Push contact | `mailto:admin@duty-w.ru` |
+| `MAX_CHAT_ATTACHMENT_SIZE` | Макс. размер одного изображения в чате (байты) | `8388608` (8 МБ) |
+| `MAX_CHAT_ATTACHMENTS_PER_MESSAGE` | Макс. изображений в одном сообщении | `10` |
+| `CHAT_ATTACHMENT_ORPHAN_TTL_MS` | TTL «висячих» вложений до очистки (мс) | `3600000` (1 ч) |
 
 Файл `.env` **не коммитьте** в git.
 
@@ -222,13 +225,16 @@ curl http://localhost:3000/api/health
 | POST | `/chat/rooms/direct` | approved | `{ "userId" }` — найти или создать личный чат |
 | POST | `/chat/rooms/group` | approved | `{ "title", "memberIds" }` — группа (создатель входит в состав) |
 | GET | `/chat/rooms/:id` | member | Метаданные и участники |
-| GET | `/chat/rooms/:id/messages` | member | История; `?before=<ISO>&limit=50` |
-| POST | `/chat/rooms/:id/messages` | member | `{ "body" }` — сообщение + broadcast по WebSocket |
+| GET | `/chat/rooms/:id/messages` | member | История; `?before=<ISO>&limit=50`; в каждом сообщении — `attachments[]` |
+| POST | `/chat/rooms/:id/attachments` | member | multipart `files[]` (JPEG/PNG/WebP/GIF) — шаг 1: загрузка, ответ `{ attachments: [{ id, fileName, mimeType, size, url }] }` |
+| POST | `/chat/rooms/:id/messages` | member | JSON `{ "body"?, "replyToMessageId"?, "attachmentIds"? }` — шаг 2: текст и/или привязка вложений; нужен `body` или `attachmentIds` |
 | PATCH | `/chat/rooms/:id/read` | member | Отметить прочитанным (`lastReadAt`) |
 
-**WebSocket:** `ws(s)://<host>/api/ws/chat` — после connect первое сообщение `{ "type": "auth", "token": "<access JWT>" }`, затем `{ "type": "subscribe", "roomIds": ["..."] }`. События: `message.new`, `room.updated`. Отправка сообщений только через REST.
+Файлы чата: `GET /uploads/chat/<id>.<ext>` (статика API). В preview списка комнат сообщение только с фото — текст «Фото».
 
-При новом сообщении — Web Push участникам (кроме автора), URL `/chat/:roomId` (тег `chat:{roomId}` в шторке). In-app лента `/notifications` чат не использует. Лимит: 30 POST сообщений / 15 мин на пользователя.
+**WebSocket:** `ws(s)://<host>/api/ws/chat` — после connect первое сообщение `{ "type": "auth", "token": "<access JWT>" }`, затем `{ "type": "subscribe", "roomIds": ["..."] }`. События: `message.new` (в т.ч. `attachments`), `room.updated`. Отправка — REST (двухшагово для вложений).
+
+При новом сообщении — Web Push участникам (кроме автора), URL `/chat/:roomId` (тег `chat:{roomId}` в шторке). In-app лента `/notifications` чат не использует. Лимиты: 30 POST сообщений / 15 мин; 60 POST вложений / 15 мин на пользователя.
 
 За reverse-proxy (nginx Duty) нужен проброс `Upgrade` / `Connection` до API (в актуальном `nginx/nginx.conf` — и в `location /api/ws/`, и в общем `location /api/`); в NPM — включить поддержку WebSockets для Proxy Host. Ответ Express `Cannot GET /api/ws/chat` означает, что handshake дошёл как обычный GET без upgrade.
 

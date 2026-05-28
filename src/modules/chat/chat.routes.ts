@@ -2,6 +2,7 @@ import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { authenticate, type AuthRequest } from '../../middleware/auth.js';
 import { requireApproved } from '../../middleware/requireApproved.js';
+import { chatAttachmentUpload } from './chat-attachment-upload.js';
 import {
   createDirectSchema,
   createGroupSchema,
@@ -23,6 +24,7 @@ import {
   postMessage,
   removeMessageReaction,
   setMessageReaction,
+  uploadRoomAttachments,
 } from './chat.service.js';
 
 const postLimiter = rateLimit({
@@ -30,6 +32,13 @@ const postLimiter = rateLimit({
   max: 30,
   keyGenerator: (req) => (req as AuthRequest).user?.sub ?? req.ip ?? 'unknown',
   message: { message: 'Слишком много сообщений, попробуйте позже' },
+});
+
+const uploadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  keyGenerator: (req) => (req as AuthRequest).user?.sub ?? req.ip ?? 'unknown',
+  message: { message: 'Слишком много загрузок, попробуйте позже' },
 });
 
 const reactionLimiter = rateLimit({
@@ -112,13 +121,39 @@ chatRouter.get('/rooms/:id/messages', async (req: AuthRequest, res, next) => {
 });
 
 chatRouter.post(
+  '/rooms/:id/attachments',
+  uploadLimiter,
+  chatAttachmentUpload.array('files'),
+  async (req: AuthRequest, res, next) => {
+    try {
+      const id = roomIdParamSchema.parse(req.params.id);
+      const files = req.files;
+      if (!files || !Array.isArray(files) || files.length === 0) {
+        res.status(400).json({ message: 'Не выбраны файлы' });
+        return;
+      }
+      const data = await uploadRoomAttachments(id, req.user!.sub, files);
+      res.status(201).json(data);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+chatRouter.post(
   '/rooms/:id/messages',
   postLimiter,
   async (req: AuthRequest, res, next) => {
     try {
       const id = roomIdParamSchema.parse(req.params.id);
       const body = messageBodySchema.parse(req.body);
-      const data = await postMessage(id, req.user!.sub, body.body, body.replyToMessageId);
+      const data = await postMessage(
+        id,
+        req.user!.sub,
+        body.body,
+        body.replyToMessageId,
+        body.attachmentIds,
+      );
       res.status(201).json(data);
     } catch (e) {
       next(e);

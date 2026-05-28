@@ -24,10 +24,14 @@ export function errorHandler(
   }
 
   if (err instanceof MulterError) {
+    const isChatUpload = _req.path.includes('/attachments');
+    const maxSize = isChatUpload ? env.maxChatAttachmentSize : env.maxAvatarSize;
     const message =
       err.code === 'LIMIT_FILE_SIZE'
-        ? `Файл слишком большой (макс. ${Math.round(env.maxAvatarSize / 1024 / 1024)} МБ)`
-        : 'Ошибка загрузки файла';
+        ? `Файл слишком большой (макс. ${Math.round(maxSize / 1024 / 1024)} МБ)`
+        : err.code === 'LIMIT_FILE_COUNT'
+          ? `Слишком много файлов (макс. ${env.maxChatAttachmentsPerMessage})`
+          : 'Ошибка загрузки файла';
     res.status(400).json({ message });
     return;
   }
