@@ -118,7 +118,7 @@ chatRouter.post(
     try {
       const id = roomIdParamSchema.parse(req.params.id);
       const body = messageBodySchema.parse(req.body);
-      const data = await postMessage(id, req.user!.sub, body.body);
+      const data = await postMessage(id, req.user!.sub, body.body, body.replyToMessageId);
       res.status(201).json(data);
     } catch (e) {
       next(e);

@@ -8,6 +8,7 @@ import {
 import { broadcastToRoom, broadcastToUser } from '../../ws/chat-ws.server.js';
 import type {
   ChatMessageDto,
+  ChatMessageReplyToDto,
   ChatReactionSummaryDto,
   ChatRoomListItemDto,
 } from '../../ws/chat-ws.types.js';
@@ -21,8 +22,41 @@ const authorSelect = {
 
 const contactSelect = userAvatarPublicSelect;
 
+const REPLY_BODY_MAX = 120;
+
+const replyToSelect = {
+  id: true,
+  body: true,
+  author: { select: { id: true, fullName: true } },
+} as const;
+
+const messageInclude = {
+  author: { select: authorSelect },
+  replyTo: { select: replyToSelect },
+} as const;
+
 function directKeyIds(a: string, b: string): [string, string] {
   return a < b ? [a, b] : [b, a];
+}
+
+function truncateReplyBody(body: string, max = REPLY_BODY_MAX): string {
+  if (body.length <= max) return body;
+  return `${body.slice(0, max - 1)}…`;
+}
+
+function mapReplyTo(
+  replyTo: {
+    id: string;
+    body: string;
+    author: { id: string; fullName: string };
+  } | null | undefined,
+): ChatMessageReplyToDto | undefined {
+  if (!replyTo) return undefined;
+  return {
+    id: replyTo.id,
+    body: truncateReplyBody(replyTo.body),
+    author: { id: replyTo.author.id, fullName: replyTo.author.fullName },
+  };
 }
 
 function mapMessage(row: {
@@ -38,10 +72,16 @@ function mapMessage(row: {
     avatarFocusY: number;
     role: UserRole;
   };
+  replyTo?: {
+    id: string;
+    body: string;
+    author: { id: string; fullName: string };
+  } | null;
 },
   reactions: ChatReactionSummaryDto[] = [],
   status?: 'sent' | 'delivered' | 'read',
 ): ChatMessageDto {
+  const replyTo = mapReplyTo(row.replyTo);
   return {
     id: row.id,
     body: row.body,
@@ -56,6 +96,7 @@ function mapMessage(row: {
       avatarFocusY: row.author.avatarFocusY,
       role: row.author.role,
     },
+    ...(replyTo ? { replyTo } : {}),
     ...(status ? { status } : {}),
   };
 }
@@ -265,7 +306,7 @@ async function buildRoomListItem(
           messages: {
             orderBy: { createdAt: 'desc' },
             take: 1,
-            select: { body: true, createdAt: true },
+            select: { body: true, createdAt: true, replyToMessageId: true },
           },
           members: {
             include: { user: { select: userAvatarMiniSelect } },
@@ -290,7 +331,11 @@ async function buildRoomListItem(
     displayAvatarUrl,
     displayAvatarFocusX,
     displayAvatarFocusY,
-    lastMessagePreview: last?.body ?? null,
+    lastMessagePreview: last
+      ? last.replyToMessageId
+        ? `↩ ${truncateReplyBody(last.body)}`
+        : last.body
+      : null,
     lastMessageAt: last?.createdAt.toISOString() ?? null,
     unreadCount,
     updatedAt: room.updatedAt.toISOString(),
@@ -349,7 +394,7 @@ export async function listMyRooms(userId: string) {
           messages: {
             orderBy: { createdAt: 'desc' },
             take: 1,
-            select: { body: true, createdAt: true },
+            select: { body: true, createdAt: true, replyToMessageId: true },
           },
           members: {
             include: { user: { select: userAvatarMiniSelect } },
@@ -378,7 +423,11 @@ export async function listMyRooms(userId: string) {
       displayAvatarUrl,
       displayAvatarFocusX,
       displayAvatarFocusY,
-      lastMessagePreview: last?.body ?? null,
+      lastMessagePreview: last
+      ? last.replyToMessageId
+        ? `↩ ${truncateReplyBody(last.body)}`
+        : last.body
+      : null,
       lastMessageAt: last?.createdAt.toISOString() ?? null,
       unreadCount,
       updatedAt: m.room.updatedAt.toISOString(),
@@ -576,7 +625,7 @@ export async function getMessages(
     },
     orderBy: { createdAt: 'desc' },
     take: limit,
-    include: { author: { select: authorSelect } },
+    include: messageInclude,
   });
 
   const room = await prisma.chatRoom.findUnique({
@@ -706,7 +755,12 @@ async function emitRoomUpdates(roomId: string): Promise<void> {
   );
 }
 
-export async function postMessage(roomId: string, authorId: string, body: string) {
+export async function postMessage(
+  roomId: string,
+  authorId: string,
+  body: string,
+  replyToMessageId?: string,
+) {
   await assertMember(roomId, authorId);
   const room = await prisma.chatRoom.findUnique({
     where: { id: roomId },
@@ -714,6 +768,19 @@ export async function postMessage(roomId: string, authorId: string, body: string
   });
   if (!room) {
     throw new AppError(404, 'Чат не найден');
+  }
+
+  if (replyToMessageId) {
+    const target = await prisma.chatMessage.findUnique({
+      where: { id: replyToMessageId },
+      select: { roomId: true },
+    });
+    if (!target) {
+      throw new AppError(404, 'Сообщение для ответа не найдено');
+    }
+    if (target.roomId !== roomId) {
+      throw new AppError(400, 'Нельзя ответить на сообщение из другого чата');
+    }
   }
 
   const author = await prisma.user.findUnique({
@@ -726,8 +793,8 @@ export async function postMessage(roomId: string, authorId: string, body: string
 
   const message = await prisma.$transaction(async (tx) => {
     const created = await tx.chatMessage.create({
-      data: { roomId, authorId, body },
-      include: { author: { select: authorSelect } },
+      data: { roomId, authorId, body, replyToMessageId: replyToMessageId ?? null },
+      include: messageInclude,
     });
 
     await tx.chatRoom.update({

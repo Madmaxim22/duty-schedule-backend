@@ -13,11 +13,18 @@ export type ChatReactionSummaryDto = {
   reactors: ChatReactionReactorDto[];
 };
 
+export type ChatMessageReplyToDto = {
+  id: string;
+  body: string;
+  author: { id: string; fullName: string };
+};
+
 export type ChatMessageDto = {
   id: string;
   body: string;
   createdAt: string;
   reactions: ChatReactionSummaryDto[];
+  replyTo?: ChatMessageReplyToDto;
   status?: 'sent' | 'delivered' | 'read';
   author: {
     id: string;

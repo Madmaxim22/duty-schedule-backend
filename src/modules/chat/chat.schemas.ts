@@ -7,6 +7,7 @@ export const messageBodySchema = z.object({
     .trim()
     .min(1, 'Сообщение не может быть пустым')
     .max(2000, 'Сообщение не длиннее 2000 символов'),
+  replyToMessageId: z.string().uuid().optional(),
 });
 
 export const roomIdParamSchema = z.string().uuid();

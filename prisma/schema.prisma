@@ -298,18 +298,22 @@ model ChatMember {
 }
 
 model ChatMessage {
-  id        String   @id @default(uuid())
-  roomId    String   @map("room_id")
-  authorId  String   @map("author_id")
-  body      String
-  createdAt DateTime @default(now()) @map("created_at")
+  id               String   @id @default(uuid())
+  roomId           String   @map("room_id")
+  authorId         String   @map("author_id")
+  body             String
+  replyToMessageId String?  @map("reply_to_message_id")
+  createdAt        DateTime @default(now()) @map("created_at")
 
   room        ChatRoom                @relation(fields: [roomId], references: [id], onDelete: Cascade)
   author      User                    @relation("ChatMessageAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  replyTo     ChatMessage?            @relation("ChatMessageReply", fields: [replyToMessageId], references: [id], onDelete: SetNull)
+  replies     ChatMessage[]           @relation("ChatMessageReply")
   deliveries  ChatMessageDelivery[]
   reactions   ChatMessageReaction[]
 
   @@index([roomId, createdAt])
+  @@index([replyToMessageId])
   @@map("chat_messages")
 }
 
