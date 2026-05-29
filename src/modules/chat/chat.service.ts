@@ -32,12 +32,26 @@ const authorSelect = {
 const contactSelect = userAvatarPublicSelect;
 
 const REPLY_BODY_MAX = 120;
+export const DELETED_MESSAGE_BODY = 'Сообщение удалено';
 
 const replyToSelect = {
   id: true,
   body: true,
+  deletedAt: true,
   author: { select: { id: true, fullName: true } },
 } as const;
+
+const lastMessageSelect = {
+  body: true,
+  createdAt: true,
+  replyToMessageId: true,
+  deletedAt: true,
+  attachments: { take: 1, select: { id: true } },
+} as const;
+
+function visibleMessagesForUser(userId: string) {
+  return { hides: { none: { userId } } } as const;
+}
 
 const attachmentSelect = {
   id: true,
@@ -91,10 +105,12 @@ function truncateReplyBody(body: string, max = REPLY_BODY_MAX): string {
 type LastMessagePreviewSource = {
   body: string;
   replyToMessageId: string | null;
+  deletedAt?: Date | null;
   attachments: { id: string }[];
 };
 
 function formatLastMessagePreview(last: LastMessagePreviewSource): string {
+  if (last.deletedAt) return DELETED_MESSAGE_BODY;
   const base = last.body.trim() || (last.attachments.length > 0 ? 'Фото' : '');
   return last.replyToMessageId ? `↩ ${truncateReplyBody(base)}` : base;
 }
@@ -103,13 +119,15 @@ function mapReplyTo(
   replyTo: {
     id: string;
     body: string;
+    deletedAt?: Date | null;
     author: { id: string; fullName: string };
   } | null | undefined,
 ): ChatMessageReplyToDto | undefined {
   if (!replyTo) return undefined;
+  const body = replyTo.deletedAt ? DELETED_MESSAGE_BODY : replyQuoteBody(replyTo.body);
   return {
     id: replyTo.id,
-    body: replyQuoteBody(replyTo.body),
+    body,
     author: { id: replyTo.author.id, fullName: replyTo.author.fullName },
   };
 }
@@ -118,6 +136,7 @@ function mapMessage(row: {
   id: string;
   body: string;
   createdAt: Date;
+  deletedAt?: Date | null;
   author: {
     id: string;
     fullName: string;
@@ -130,6 +149,7 @@ function mapMessage(row: {
   replyTo?: {
     id: string;
     body: string;
+    deletedAt?: Date | null;
     author: { id: string; fullName: string };
   } | null;
   attachments?: Array<{
@@ -146,6 +166,29 @@ function mapMessage(row: {
   status?: 'sent' | 'delivered' | 'read',
 ): ChatMessageDto {
   const replyTo = mapReplyTo(row.replyTo);
+  const author = {
+    id: row.author.id,
+    fullName: row.author.fullName,
+    avatarUrl: row.author.avatarUrl,
+    currentPhotoId: row.author.currentPhotoId,
+    avatarFocusX: row.author.avatarFocusX,
+    avatarFocusY: row.author.avatarFocusY,
+    role: row.author.role,
+  };
+
+  if (row.deletedAt) {
+    return {
+      id: row.id,
+      body: DELETED_MESSAGE_BODY,
+      deleted: true,
+      createdAt: row.createdAt.toISOString(),
+      reactions: [],
+      author,
+      ...(replyTo ? { replyTo } : {}),
+      ...(status ? { status } : {}),
+    };
+  }
+
   const attachments = row.attachments?.map(mapAttachment);
   return {
     id: row.id,
@@ -153,15 +196,7 @@ function mapMessage(row: {
     createdAt: row.createdAt.toISOString(),
     reactions,
     ...(attachments && attachments.length > 0 ? { attachments } : {}),
-    author: {
-      id: row.author.id,
-      fullName: row.author.fullName,
-      avatarUrl: row.author.avatarUrl,
-      currentPhotoId: row.author.currentPhotoId,
-      avatarFocusX: row.author.avatarFocusX,
-      avatarFocusY: row.author.avatarFocusY,
-      role: row.author.role,
-    },
+    author,
     ...(replyTo ? { replyTo } : {}),
     ...(status ? { status } : {}),
   };
@@ -253,12 +288,97 @@ async function getMessageReactions(messageId: string, viewerId: string) {
 async function assertMessageInRoom(roomId: string, messageId: string) {
   const message = await prisma.chatMessage.findUnique({
     where: { id: messageId },
-    select: { id: true, roomId: true },
+    select: { id: true, roomId: true, deletedAt: true },
   });
   if (!message || message.roomId !== roomId) {
     throw new AppError(404, 'Сообщение не найдено');
   }
+  if (message.deletedAt) {
+    throw new AppError(400, 'Нельзя реагировать на удалённое сообщение');
+  }
   return message;
+}
+
+export type DeleteMessageMode = 'me' | 'everyone';
+
+export async function deleteMessage(
+  roomId: string,
+  messageId: string,
+  userId: string,
+  mode: DeleteMessageMode,
+) {
+  await assertMember(roomId, userId);
+
+  const message = await prisma.chatMessage.findUnique({
+    where: { id: messageId },
+    select: { id: true, roomId: true, authorId: true, deletedAt: true, createdAt: true },
+  });
+  if (!message || message.roomId !== roomId) {
+    throw new AppError(404, 'Сообщение не найдено');
+  }
+
+  if (mode === 'everyone') {
+    if (message.authorId !== userId) {
+      throw new AppError(403, 'Можно удалить у всех только своё сообщение');
+    }
+    if (message.deletedAt) {
+      throw new AppError(400, 'Сообщение уже удалено');
+    }
+
+    const now = new Date();
+    await prisma.$transaction(async (tx) => {
+      const attachments = await tx.chatMessageAttachment.findMany({
+        where: { messageId },
+        select: { id: true, url: true },
+      });
+      for (const row of attachments) {
+        await removeChatAttachmentFile(row.id, extensionFromUrl(row.url));
+      }
+      if (attachments.length > 0) {
+        await tx.chatMessageAttachment.deleteMany({ where: { messageId } });
+      }
+      await tx.chatMessageReaction.deleteMany({ where: { messageId } });
+      await tx.chatMessageDelivery.deleteMany({ where: { messageId } });
+      await tx.chatMessage.update({
+        where: { id: messageId },
+        data: { body: '', deletedAt: now, deletedById: userId },
+      });
+      await tx.chatRoom.update({
+        where: { id: roomId },
+        data: { updatedAt: now },
+      });
+    });
+
+    const row = await prisma.chatMessage.findUniqueOrThrow({
+      where: { id: messageId },
+      include: messageInclude,
+    });
+    const room = await prisma.chatRoom.findUnique({
+      where: { id: roomId },
+      select: { type: true },
+    });
+    const dto = mapMessage(
+      row,
+      [],
+      room?.type === 'direct' && row.author.id === userId
+        ? resolveOwnMessageStatus(row.createdAt, null, false)
+        : undefined,
+    );
+
+    broadcastToRoom(roomId, { type: 'message.updated', roomId, message: dto });
+    await emitRoomUpdates(roomId);
+    return { message: dto };
+  }
+
+  await prisma.chatMessageUserHide.upsert({
+    where: { messageId_userId: { messageId, userId } },
+    create: { messageId, userId },
+    update: {},
+  });
+
+  broadcastToUser(userId, { type: 'message.hidden', roomId, messageId });
+  await emitRoomUpdates(roomId);
+  return { ok: true as const };
 }
 
 function broadcastMessageReactions(roomId: string, messageId: string, reactions: ChatReactionSummaryDto[]) {
@@ -370,14 +490,10 @@ async function buildRoomListItem(
       room: {
         include: {
           messages: {
+            where: visibleMessagesForUser(userId),
             orderBy: { createdAt: 'desc' },
             take: 1,
-            select: {
-              body: true,
-              createdAt: true,
-              replyToMessageId: true,
-              attachments: { take: 1, select: { id: true } },
-            },
+            select: lastMessageSelect,
           },
           members: {
             include: { user: { select: userAvatarMiniSelect } },
@@ -491,14 +607,10 @@ export async function listMyRooms(userId: string) {
       room: {
         include: {
           messages: {
+            where: visibleMessagesForUser(userId),
             orderBy: { createdAt: 'desc' },
             take: 1,
-            select: {
-              body: true,
-              createdAt: true,
-              replyToMessageId: true,
-              attachments: { take: 1, select: { id: true } },
-            },
+            select: lastMessageSelect,
           },
           members: {
             include: { user: { select: userAvatarMiniSelect } },
@@ -721,6 +833,7 @@ export async function getMessages(
   const rows = await prisma.chatMessage.findMany({
     where: {
       roomId,
+      ...visibleMessagesForUser(userId),
       ...(beforeDate ? { createdAt: { lt: beforeDate } } : {}),
     },
     orderBy: { createdAt: 'desc' },

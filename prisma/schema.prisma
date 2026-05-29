@@ -82,8 +82,10 @@ model User {
   chatRoomsCreated          ChatRoom[]             @relation("ChatRoomCreator")
   chatMemberships           ChatMember[]
   chatMessagesAuthored      ChatMessage[]             @relation("ChatMessageAuthor")
+  chatMessagesDeleted       ChatMessage[]             @relation("ChatMessageDeletedBy")
   chatDeliveries            ChatMessageDelivery[]
   chatMessageReactions      ChatMessageReaction[]
+  chatMessageHides          ChatMessageUserHide[]
   chatAttachmentsUploaded   ChatMessageAttachment[]   @relation("ChatAttachmentUploader")
 
   @@map("users")
@@ -300,24 +302,41 @@ model ChatMember {
 }
 
 model ChatMessage {
-  id               String   @id @default(uuid())
-  roomId           String   @map("room_id")
-  authorId         String   @map("author_id")
+  id               String    @id @default(uuid())
+  roomId           String    @map("room_id")
+  authorId         String    @map("author_id")
   body             String
-  replyToMessageId String?  @map("reply_to_message_id")
-  createdAt        DateTime @default(now()) @map("created_at")
+  replyToMessageId String?   @map("reply_to_message_id")
+  deletedAt        DateTime? @map("deleted_at")
+  deletedById      String?   @map("deleted_by_id")
+  createdAt        DateTime  @default(now()) @map("created_at")
 
   room        ChatRoom                @relation(fields: [roomId], references: [id], onDelete: Cascade)
   author      User                    @relation("ChatMessageAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  deletedBy   User?                   @relation("ChatMessageDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
   replyTo     ChatMessage?            @relation("ChatMessageReply", fields: [replyToMessageId], references: [id], onDelete: SetNull)
   replies     ChatMessage[]           @relation("ChatMessageReply")
   deliveries  ChatMessageDelivery[]
   reactions   ChatMessageReaction[]
   attachments ChatMessageAttachment[]
+  hides       ChatMessageUserHide[]
 
   @@index([roomId, createdAt])
   @@index([replyToMessageId])
   @@map("chat_messages")
+}
+
+model ChatMessageUserHide {
+  messageId String   @map("message_id")
+  userId    String   @map("user_id")
+  hiddenAt  DateTime @default(now()) @map("hidden_at")
+
+  message ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([messageId, userId])
+  @@index([userId, messageId])
+  @@map("chat_message_user_hides")
 }
 
 model ChatMessageAttachment {

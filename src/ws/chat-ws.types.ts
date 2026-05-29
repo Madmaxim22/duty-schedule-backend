@@ -33,6 +33,7 @@ export type ChatMessageDto = {
   id: string;
   body: string;
   createdAt: string;
+  deleted?: boolean;
   reactions: ChatReactionSummaryDto[];
   attachments?: ChatAttachmentDto[];
   replyTo?: ChatMessageReplyToDto;
@@ -72,6 +73,8 @@ export type ClientMessage =
 export type ServerMessage =
   | { type: 'auth.ok'; userId: string }
   | { type: 'message.new'; roomId: string; message: ChatMessageDto }
+  | { type: 'message.updated'; roomId: string; message: ChatMessageDto }
+  | { type: 'message.hidden'; roomId: string; messageId: string }
   | { type: 'message.status'; roomId: string; messageId: string; status: 'delivered' | 'read' }
   | {
       type: 'message.reaction';

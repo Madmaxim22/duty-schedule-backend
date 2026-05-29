@@ -6,6 +6,7 @@ import { chatAttachmentUpload } from './chat-attachment-upload.js';
 import {
   createDirectSchema,
   createGroupSchema,
+  deleteMessageBodySchema,
   messageBodySchema,
   messageIdParamSchema,
   messagesQuerySchema,
@@ -14,6 +15,7 @@ import {
 } from './chat.schemas.js';
 import {
   createGroupRoom,
+  deleteMessage,
   findOrCreateDirectRoom,
   getMessages,
   getRoom,
@@ -46,6 +48,13 @@ const reactionLimiter = rateLimit({
   max: 120,
   keyGenerator: (req) => (req as AuthRequest).user?.sub ?? req.ip ?? 'unknown',
   message: { message: 'Слишком много реакций, попробуйте позже' },
+});
+
+const deleteMessageLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  keyGenerator: (req) => (req as AuthRequest).user?.sub ?? req.ip ?? 'unknown',
+  message: { message: 'Слишком много удалений, попробуйте позже' },
 });
 
 export const chatRouter = Router();
@@ -195,6 +204,22 @@ chatRouter.delete(
       const roomId = roomIdParamSchema.parse(req.params.id);
       const messageId = messageIdParamSchema.parse(req.params.messageId);
       const data = await removeMessageReaction(roomId, messageId, req.user!.sub);
+      res.json(data);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+chatRouter.delete(
+  '/rooms/:id/messages/:messageId',
+  deleteMessageLimiter,
+  async (req: AuthRequest, res, next) => {
+    try {
+      const roomId = roomIdParamSchema.parse(req.params.id);
+      const messageId = messageIdParamSchema.parse(req.params.messageId);
+      const body = deleteMessageBodySchema.parse(req.body);
+      const data = await deleteMessage(roomId, messageId, req.user!.sub, body.mode);
       res.json(data);
     } catch (e) {
       next(e);

@@ -49,3 +49,7 @@ export const messagesQuerySchema = z.object({
   before: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(100).optional().default(50),
 });
+
+export const deleteMessageBodySchema = z.object({
+  mode: z.enum(['me', 'everyone']),
+});
