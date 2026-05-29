@@ -137,6 +137,7 @@ function mapMessage(row: {
   body: string;
   createdAt: Date;
   deletedAt?: Date | null;
+  editedAt?: Date | null;
   author: {
     id: string;
     fullName: string;
@@ -195,6 +196,7 @@ function mapMessage(row: {
     body: row.body,
     createdAt: row.createdAt.toISOString(),
     reactions,
+    ...(row.editedAt ? { editedAt: row.editedAt.toISOString() } : {}),
     ...(attachments && attachments.length > 0 ? { attachments } : {}),
     author,
     ...(replyTo ? { replyTo } : {}),
@@ -381,6 +383,139 @@ export async function deleteMessage(
   return { ok: true as const };
 }
 
+export async function editMessage(
+  roomId: string,
+  messageId: string,
+  userId: string,
+  body: string,
+  attachmentIds: string[],
+) {
+  await assertMember(roomId, userId);
+
+  const message = await prisma.chatMessage.findUnique({
+    where: { id: messageId },
+    select: {
+      id: true,
+      roomId: true,
+      authorId: true,
+      body: true,
+      deletedAt: true,
+      createdAt: true,
+      attachments: { select: { id: true, url: true } },
+    },
+  });
+  if (!message || message.roomId !== roomId) {
+    throw new AppError(404, 'Сообщение не найдено');
+  }
+  if (message.authorId !== userId) {
+    throw new AppError(403, 'Можно редактировать только своё сообщение');
+  }
+  if (message.deletedAt) {
+    throw new AppError(400, 'Нельзя редактировать удалённое сообщение');
+  }
+
+  const currentIds = new Set(message.attachments.map((a) => a.id));
+  const nextIds = new Set(attachmentIds);
+
+  if (message.body === body && currentIds.size === nextIds.size && [...currentIds].every((id) => nextIds.has(id))) {
+    const row = await prisma.chatMessage.findUniqueOrThrow({
+      where: { id: messageId },
+      include: messageInclude,
+    });
+    const room = await prisma.chatRoom.findUnique({
+      where: { id: roomId },
+      select: { type: true, members: { select: { userId: true, lastReadAt: true } } },
+    });
+    const reactions = await getMessageReactions(messageId, userId);
+    const peerMember =
+      room?.type === 'direct' ? room.members.find((m) => m.userId !== userId) : null;
+    const delivered =
+      room?.type === 'direct' && peerMember
+        ? await prisma.chatMessageDelivery.findFirst({
+            where: { messageId, userId: peerMember.userId },
+            select: { messageId: true },
+          })
+        : null;
+    const dto = mapMessage(
+      row,
+      reactions,
+      room?.type === 'direct'
+        ? resolveOwnMessageStatus(row.createdAt, peerMember?.lastReadAt ?? null, Boolean(delivered))
+        : undefined,
+    );
+    return { message: dto };
+  }
+
+  await assertEditAttachments(attachmentIds, roomId, userId, messageId);
+
+  const toRemove = message.attachments.filter((a) => !nextIds.has(a.id));
+  const toAdd = attachmentIds.filter((id) => !currentIds.has(id));
+
+  const now = new Date();
+  await prisma.$transaction(async (tx) => {
+    for (const row of toRemove) {
+      await removeChatAttachmentFile(row.id, extensionFromUrl(row.url));
+    }
+    if (toRemove.length > 0) {
+      await tx.chatMessageAttachment.deleteMany({
+        where: { id: { in: toRemove.map((a) => a.id) } },
+      });
+    }
+    if (toAdd.length > 0) {
+      const linked = await tx.chatMessageAttachment.updateMany({
+        where: {
+          id: { in: toAdd },
+          roomId,
+          uploaderId: userId,
+          messageId: null,
+        },
+        data: { messageId },
+      });
+      if (linked.count !== toAdd.length) {
+        throw new AppError(400, 'Не удалось привязать вложения');
+      }
+    }
+    await tx.chatMessage.update({
+      where: { id: messageId },
+      data: { body, editedAt: now },
+    });
+    await tx.chatRoom.update({
+      where: { id: roomId },
+      data: { updatedAt: now },
+    });
+  });
+
+  const row = await prisma.chatMessage.findUniqueOrThrow({
+    where: { id: messageId },
+    include: messageInclude,
+  });
+  const room = await prisma.chatRoom.findUnique({
+    where: { id: roomId },
+    select: { type: true, members: { select: { userId: true, lastReadAt: true } } },
+  });
+  const reactions = await getMessageReactions(messageId, userId);
+  const peerMember =
+    room?.type === 'direct' ? room.members.find((m) => m.userId !== userId) : null;
+  const delivered =
+    room?.type === 'direct' && peerMember
+      ? await prisma.chatMessageDelivery.findFirst({
+          where: { messageId, userId: peerMember.userId },
+          select: { messageId: true },
+        })
+      : null;
+  const dto = mapMessage(
+    row,
+    reactions,
+    room?.type === 'direct'
+      ? resolveOwnMessageStatus(row.createdAt, peerMember?.lastReadAt ?? null, Boolean(delivered))
+      : undefined,
+  );
+
+  broadcastToRoom(roomId, { type: 'message.updated', roomId, message: dto });
+  await emitRoomUpdates(roomId);
+  return { message: dto };
+}
+
 function broadcastMessageReactions(roomId: string, messageId: string, reactions: ChatReactionSummaryDto[]) {
   broadcastToRoom(roomId, { type: 'message.reaction', roomId, messageId, reactions });
 }
@@ -562,6 +697,39 @@ async function assertAttachmentsLinkable(
       throw new AppError(400, 'Вложение уже привязано к сообщению');
     }
     if (row.createdAt < cutoff) {
+      throw new AppError(400, 'Срок действия вложения истёк, загрузите снова');
+    }
+  }
+}
+
+async function assertEditAttachments(
+  ids: string[],
+  roomId: string,
+  uploaderId: string,
+  messageId: string,
+): Promise<void> {
+  if (ids.length === 0) return;
+
+  const cutoff = new Date(Date.now() - env.chatAttachmentOrphanTtlMs);
+  const rows = await prisma.chatMessageAttachment.findMany({
+    where: { id: { in: ids } },
+  });
+
+  if (rows.length !== ids.length) {
+    throw new AppError(400, 'Некорректные вложения');
+  }
+
+  for (const row of rows) {
+    if (row.roomId !== roomId) {
+      throw new AppError(403, 'Вложение из другого чата');
+    }
+    if (row.uploaderId !== uploaderId) {
+      throw new AppError(403, 'Нельзя использовать чужие вложения');
+    }
+    if (row.messageId !== null && row.messageId !== messageId) {
+      throw new AppError(400, 'Вложение уже привязано к другому сообщению');
+    }
+    if (row.messageId === null && row.createdAt < cutoff) {
       throw new AppError(400, 'Срок действия вложения истёк, загрузите снова');
     }
   }

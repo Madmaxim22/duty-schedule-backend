@@ -234,6 +234,7 @@ curl http://localhost:3000/api/health
 | PUT | `/chat/rooms/:id/messages/:messageId/reactions` | member | `{ "emoji" }` — реакция на сообщение |
 | DELETE | `/chat/rooms/:id/messages/:messageId/reactions` | member | Снять свою реакцию |
 | DELETE | `/chat/rooms/:id/messages/:messageId` | member | `{ "mode": "me" \| "everyone" }` — скрыть у себя или удалить у всех (только своё); ответ: `{ "message" }` (tombstone) или `{ "ok": true }` |
+| PATCH | `/chat/rooms/:id/messages/:messageId` | member (автор) | `{ "body": "...", "attachmentIds": ["uuid", ...] }` — редактировать своё сообщение (текст и набор вложений); ответ: `{ "message" }` с опциональным `editedAt` |
 
 Файлы чата: `GET /uploads/chat/<id>.<ext>` (статика API). В preview списка комнат сообщение только с фото — текст «Фото»; удалённое у всех — «Сообщение удалено».
 

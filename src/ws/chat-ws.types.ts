@@ -34,6 +34,7 @@ export type ChatMessageDto = {
   body: string;
   createdAt: string;
   deleted?: boolean;
+  editedAt?: string;
   reactions: ChatReactionSummaryDto[];
   attachments?: ChatAttachmentDto[];
   replyTo?: ChatMessageReplyToDto;

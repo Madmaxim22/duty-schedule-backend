@@ -53,3 +53,20 @@ export const messagesQuerySchema = z.object({
 export const deleteMessageBodySchema = z.object({
   mode: z.enum(['me', 'everyone']),
 });
+
+export const editMessageBodySchema = z
+  .object({
+    body: z.string().trim().max(2000, 'Сообщение не длиннее 2000 символов').default(''),
+    attachmentIds: z.array(z.string().uuid()).max(10).default([]),
+  })
+  .superRefine((data, ctx) => {
+    const hasBody = data.body.length > 0;
+    const hasAttachments = data.attachmentIds.length > 0;
+    if (!hasBody && !hasAttachments) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Укажите текст сообщения или прикрепите изображение',
+        path: ['body'],
+      });
+    }
+  });
