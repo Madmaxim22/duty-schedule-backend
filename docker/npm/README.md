@@ -6,18 +6,37 @@
 
 NPM и Duty — **разные** compose-проекты. `127.0.0.1:8080` в Proxy Host **не работает** (502): для NPM это localhost своего контейнера, а не NAS. Используйте общую сеть `duty-proxy`.
 
+## Пути на NAS (OMV)
+
+| Назначение | Путь |
+|------------|------|
+| Корень NPM | `/srv/dev-disk-by-uuid-7b779ac5-3f1c-4c5d-98bc-5ed97247f35c/docker_data/docker/npm/` |
+| `server_proxy.conf` (volume) | `/srv/dev-disk-by-uuid-7b779ac5-3f1c-4c5d-98bc-5ed97247f35c/docker_data/docker/npm/data/nginx/custom/server_proxy.conf` |
+| `server_proxy.conf` (bind mount) | `/srv/dev-disk-by-uuid-7b779ac5-3f1c-4c5d-98bc-5ed97247f35c/docker_data/docker/npm/custom/server_proxy.conf` |
+
+Редактирование на NAS:
+
+```bash
+sudo nano /srv/dev-disk-by-uuid-7b779ac5-3f1c-4c5d-98bc-5ed97247f35c/docker_data/docker/npm/data/nginx/custom/server_proxy.conf
+# или (если используется bind mount из docker-compose.yml):
+sudo nano /srv/dev-disk-by-uuid-7b779ac5-3f1c-4c5d-98bc-5ed97247f35c/docker_data/docker/npm/custom/server_proxy.conf
+cd /srv/dev-disk-by-uuid-7b779ac5-3f1c-4c5d-98bc-5ed97247f35c/docker_data/docker/npm
+docker compose up -d
+```
+
 ## Быстрый старт на OMV
 
 ```bash
 docker network create duty-proxy   # один раз
 
-mkdir -p /srv/.../docker/npm
-# скопируйте docker-compose.yml в эту папку
-cd /srv/.../docker/npm
+NPM_ROOT=/srv/dev-disk-by-uuid-7b779ac5-3f1c-4c5d-98bc-5ed97247f35c/docker_data/docker/npm
+mkdir -p "$NPM_ROOT"
+# скопируйте docker-compose.yml и custom/ в эту папку
+cd "$NPM_ROOT"
 docker compose up -d
 
 # Duty должен быть в той же сети (container_name: duty-nginx в docker-compose.yml)
-cd /srv/.../duty-schedule/duty-schedule-backend
+cd /srv/dev-disk-by-uuid-7b779ac5-3f1c-4c5d-98bc-5ed97247f35c/docker_data/duty-schedule/duty-schedule-backend
 docker compose up -d
 ```
 
@@ -33,25 +52,38 @@ docker compose up -d
 | Forward Port | `80` |
 | SSL | Request Let's Encrypt, Force SSL |
 
-**Лимит загрузки (413):** в `docker-compose.yml` смонтирован `./custom/server_proxy.conf` → `client_max_body_size 80m` (10 фото × 8 МБ) для всех proxy hosts. После копирования compose на NAS:
+**Лимит загрузки (413):** нужны **два** слоя — и NPM, и duty-nginx (см. ниже). Загрузка ~25 МБ при лимите 16m даёт **413** с `server: openresty` — это ответ **NPM**, не duty-nginx.
+
+### NPM — обязательно в Advanced (location /)
+
+`server_proxy.conf` попадает в **server**-блок, а NPM задаёт `client_max_body_size` внутри **`location /`**. Лимит location **перекрывает** server → одного `server_proxy.conf` недостаточно.
+
+Админка NPM → **Hosts → Proxy Hosts → duty-w.ru → Edit → Advanced** → Custom Nginx Configuration:
+
+```nginx
+client_max_body_size 80m;
+proxy_set_header Host $host;
+proxy_set_header X-Real-IP $remote_addr;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto $scheme;
+```
+
+Сохранить → Save. Перезапуск NPM не нужен (конфиг перегенерируется).
+
+Дополнительно в `docker-compose.yml` смонтирован `./custom/server_proxy.conf` → `80m` на уровне server (запас для других hosts):
 
 ```bash
 cd /srv/.../docker/npm
 docker compose up -d
 ```
 
-Проверка внутри NPM: `docker exec <npm-container> nginx -T 2>/dev/null | grep client_max_body_size`
+**Проверка лимита именно для duty-w.ru** (не общий grep):
 
-Только строка в **Advanced** иногда **не работает** (баг/порядок директив NPM). Тогда не полагайтесь на Advanced для лимита — достаточно `server_proxy.conf`.
-
-**Advanced → Custom Nginx Configuration** (заголовки; `client_max_body_size` здесь опционально, если уже есть `server_proxy.conf`):
-
-```nginx
-proxy_set_header Host $host;
-proxy_set_header X-Real-IP $remote_addr;
-proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-proxy_set_header X-Forwarded-Proto $scheme;
+```bash
+docker exec npm-npm-1 nginx -T 2>/dev/null | grep -A80 'server_name duty-w.ru' | grep client_max_body_size
 ```
+
+Должно быть **`80m` внутри блока `location /`** для этого хоста. Если видите только `1m` или `16m` — правка Advanced не сохранилась.
 
 **Duty-nginx** (второй слой): на NAS `git pull` в `duty-schedule-backend` и `docker compose up -d nginx` — в `nginx.conf` тоже должно быть `client_max_body_size 80m;`. Без этого 413 останется, даже если NPM исправлен.
 

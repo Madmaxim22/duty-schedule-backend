@@ -157,7 +157,7 @@ curl http://localhost:3000/api/health
 | `MAX_CHAT_ATTACHMENTS_PER_MESSAGE` | Макс. изображений в одном сообщении | `10` |
 | `CHAT_ATTACHMENT_ORPHAN_TTL_MS` | TTL «висячих» вложений до очистки (мс) | `3600000` (1 ч) |
 
-В **nginx** (`nginx/nginx.conf`) и **NPM** (`docker/npm/custom/server_proxy.conf`) задайте `client_max_body_size` не меньше произведения двух лимитов выше (по умолчанию **80m**). Иначе при пакетной загрузке фото в чат будет **413 Request Entity Too Large**.
+Лимит тела запроса для пакетной загрузки фото: **80m** (10 × 8 МБ) в **duty-nginx** (`nginx/nginx.conf`, после правки — `docker compose up -d --force-recreate --no-deps nginx`) и в **NPM** — в **Advanced** Proxy Host `duty-w.ru` (`client_max_body_size 80m;` внутри `location /`; одного `server_proxy.conf` мало). Если 413 с `server: openresty` — узкое место NPM. Подробности: [docker/npm/README.md](docker/npm/README.md).
 
 Файл `.env` **не коммитьте** в git.
 
