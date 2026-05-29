@@ -33,7 +33,7 @@ docker compose up -d
 | Forward Port | `80` |
 | SSL | Request Let's Encrypt, Force SSL |
 
-**Лимит загрузки (413):** в `docker-compose.yml` смонтирован `./custom/server_proxy.conf` → `client_max_body_size 16m` для всех proxy hosts. После копирования compose на NAS:
+**Лимит загрузки (413):** в `docker-compose.yml` смонтирован `./custom/server_proxy.conf` → `client_max_body_size 80m` (10 фото × 8 МБ) для всех proxy hosts. После копирования compose на NAS:
 
 ```bash
 cd /srv/.../docker/npm
@@ -53,7 +53,7 @@ proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 proxy_set_header X-Forwarded-Proto $scheme;
 ```
 
-**Duty-nginx** (второй слой): на NAS `git pull` в `duty-schedule-backend` и `docker compose up -d nginx` — в `nginx.conf` тоже должно быть `client_max_body_size 16m;`. Без этого 413 останется, даже если NPM исправлен.
+**Duty-nginx** (второй слой): на NAS `git pull` в `duty-schedule-backend` и `docker compose up -d nginx` — в `nginx.conf` тоже должно быть `client_max_body_size 80m;`. Без этого 413 останется, даже если NPM исправлен.
 
 **Trust Upstream Forwarded Proto** — выключить (NPM — крайний прокси).
 

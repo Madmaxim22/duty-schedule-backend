@@ -157,6 +157,8 @@ curl http://localhost:3000/api/health
 | `MAX_CHAT_ATTACHMENTS_PER_MESSAGE` | Макс. изображений в одном сообщении | `10` |
 | `CHAT_ATTACHMENT_ORPHAN_TTL_MS` | TTL «висячих» вложений до очистки (мс) | `3600000` (1 ч) |
 
+В **nginx** (`nginx/nginx.conf`) и **NPM** (`docker/npm/custom/server_proxy.conf`) задайте `client_max_body_size` не меньше произведения двух лимитов выше (по умолчанию **80m**). Иначе при пакетной загрузке фото в чат будет **413 Request Entity Too Large**.
+
 Файл `.env` **не коммитьте** в git.
 
 ### Web Push (оповещение админа о заявках)
