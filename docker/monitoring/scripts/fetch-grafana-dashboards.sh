@@ -24,8 +24,10 @@ fetch() {
     > "$OUT/${name}.json"
 }
 
-fetch 1860 node-exporter-full
-fetch 893 docker-cadvisor
-fetch 9628 postgresql-database
+# Community dashboards (React, без Angular — совместимы с Grafana 11+).
+# Старые ID 1860/893/9628 давали предупреждение «depends on Angular».
+fetch 22479 node-exporter-full
+fetch 14282 docker-cadvisor
+fetch 14114 postgresql-database
 
 echo "Done. Dashboards saved to $OUT"
