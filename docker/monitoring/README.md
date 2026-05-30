@@ -195,25 +195,28 @@ docker compose restart grafana
 
 **Важно:** ID **22479** на grafana.com — это **Shelly Pro 3EM** (умный счётчик), не Node Exporter. Скрипт использует **11074** для NAS.
 
-**Docker Cadvisor — No data / count(container_cpu...)=0:** cAdvisor на OMV (cgroup v2) нужны **docker.sock** и **/sys/fs/cgroup**. После `git pull`:
+**Docker Cadvisor — No data / mount-id errors:** на OMV Docker хранится в **`/srv/.../docker`**, не в `/var/lib/docker`. В `.env`:
+
+```env
+DOCKER_DATA_ROOT=/srv/dev-disk-by-uuid-7b779ac5-3f1c-4c5d-98bc-5ed97247f35c/docker
+```
+
+Проверка: `docker info | grep 'Docker Root Dir'` — путь должен совпадать.
 
 ```bash
 cd /srv/.../docker/monitoring
+grep DOCKER_DATA_ROOT .env || echo 'DOCKER_DATA_ROOT=/srv/.../docker' >> .env
 docker compose up -d --force-recreate cadvisor
 sleep 90
 sh scripts/verify-cadvisor.sh
 ```
 
-Ожидается в п.3 `value` > 0 и в п.4 список сервисов (`api`, `db`, `grafana`, …). Затем `docker compose restart grafana`.
+Ожидается **п.3** `count(...{image!=""})` > 0. Если в логах остаётся `mount-id: no such file` и `docker info` показывает **containerd-snapshotter** — cAdvisor не совместим с новым storage Docker. Варианты:
 
-Дашборды: **Duty → Docker Containers** или **Duty Overview**. Community **Cadvisor exporter** (14282) часто пустой — фильтр `name=~".+"` устарел.
+1. **Отключить containerd snapshotter** (нужен restart Docker, downtime): в `/etc/docker/daemon.json` убрать `"containerd-snapshotter": true`, затем `systemctl restart docker`.
+2. **Мониторить без cAdvisor:** Duty Overview (health, disk, RAM) + Node Exporter; контейнеры смотреть через `docker stats` / Portainer.
 
-Ручная проверка:
-
-```bash
-curl -sG 'http://127.0.0.1:9090/api/v1/query' --data-urlencode 'query=count(container_cpu_usage_seconds_total{image!=""})'
-curl -sG 'http://127.0.0.1:9090/api/v1/label/container_label_com_docker_compose_service/values'
-```
+Дашборды контейнеров: **Duty → Docker Containers**. Community **Cadvisor exporter** (14282) — устаревший, не рекомендуется.
 
 **Duty Overview** уже использует правильный datasource и не должен показывать эти ошибки.
 

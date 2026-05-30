@@ -83,21 +83,26 @@ services:
     image: gcr.io/cadvisor/cadvisor:v0.49.1
     restart: unless-stopped
     privileged: true
+    env_file: .env
     command:
-      # labels compose (project/service) для Grafana
+      # OMV: Docker data-root на HDD (/srv/.../docker), не /var/lib/docker
+      - '--docker=unix:///var/run/docker.sock'
+      - '--containerd=/run/containerd/containerd.sock'
+      - '--docker-root=${DOCKER_DATA_ROOT:-/srv/dev-disk-by-uuid-7b779ac5-3f1c-4c5d-98bc-5ed97247f35c/docker}'
       - '--store_container_labels=true'
       - '--whitelisted_container_labels=com.docker.compose.project,com.docker.compose.service,com.docker.compose.project.working_dir'
       - '--housekeeping_interval=30s'
-      # docker_only убран: на OMV/cgroup v2 иногда скрывает все контейнеры
     devices:
       - /dev/kmsg:/dev/kmsg
     volumes:
       - /:/rootfs:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /run/containerd:/run/containerd:ro
       - /sys:/sys:ro
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
-      - /var/lib/docker/:/var/lib/docker:ro
       - /dev/disk/:/dev/disk:ro
+      # data-root с HDD → /var/lib/docker внутри cAdvisor (ожидаемый путь для layerdb)
+      - ${DOCKER_DATA_ROOT:-/srv/dev-disk-by-uuid-7b779ac5-3f1c-4c5d-98bc-5ed97247f35c/docker}:/var/lib/docker:ro
     networks:
       - monitoring
 

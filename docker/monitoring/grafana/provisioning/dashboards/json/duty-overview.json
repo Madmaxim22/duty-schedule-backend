@@ -168,6 +168,11 @@
           "expr": "sum by (container_label_com_docker_compose_project, container_label_com_docker_compose_service) (rate(container_cpu_usage_seconds_total{image!=\"\", container_label_com_docker_compose_service!=\"\"}[5m]))",
           "legendFormat": "{{ container_label_com_docker_compose_project }}/{{ container_label_com_docker_compose_service }}",
           "refId": "A"
+        },
+        {
+          "expr": "sum by (id) (rate(container_cpu_usage_seconds_total{id=~\"/system.slice/docker-.*\\\\.scope\", cpu=\"total\", image=\"\"}[5m]))",
+          "legendFormat": "{{ id }}",
+          "refId": "B"
         }
       ],
       "title": "Container CPU (Duty + monitoring + NPM)",
@@ -215,5 +220,5 @@
   "timezone": "browser",
   "title": "Duty Overview",
   "uid": "duty-overview",
-  "version": 3
+  "version": 4
 }
