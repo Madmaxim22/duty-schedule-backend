@@ -84,16 +84,18 @@ services:
     restart: unless-stopped
     privileged: true
     command:
-      # Без store_container_labels нет container_label_com_docker_compose_* → Grafana No data
+      # labels compose (project/service) для Grafana
       - '--store_container_labels=true'
       - '--whitelisted_container_labels=com.docker.compose.project,com.docker.compose.service,com.docker.compose.project.working_dir'
-      - '--docker_only=true'
+      - '--housekeeping_interval=30s'
+      # docker_only убран: на OMV/cgroup v2 иногда скрывает все контейнеры
     devices:
       - /dev/kmsg:/dev/kmsg
     volumes:
       - /:/rootfs:ro
-      - /var/run:/var/run:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
       - /sys:/sys:ro
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
       - /var/lib/docker/:/var/lib/docker:ro
       - /dev/disk/:/dev/disk:ro
     networks:

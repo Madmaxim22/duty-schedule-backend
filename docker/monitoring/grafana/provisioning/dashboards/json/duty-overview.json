@@ -165,7 +165,7 @@
       "options": { "legend": { "displayMode": "table" }, "tooltip": { "mode": "multi" } },
       "targets": [
         {
-          "expr": "sum by (container_label_com_docker_compose_project, container_label_com_docker_compose_service) (rate(container_cpu_usage_seconds_total{image!=\"\", id=~\"/docker/.+\", container_label_com_docker_compose_service!=\"\"}[5m]))",
+          "expr": "sum by (container_label_com_docker_compose_project, container_label_com_docker_compose_service) (rate(container_cpu_usage_seconds_total{image!=\"\", container_label_com_docker_compose_service!=\"\"}[5m]))",
           "legendFormat": "{{ container_label_com_docker_compose_project }}/{{ container_label_com_docker_compose_service }}",
           "refId": "A"
         }
@@ -181,7 +181,7 @@
       "options": { "legend": { "displayMode": "table" }, "tooltip": { "mode": "multi" } },
       "targets": [
         {
-          "expr": "sum by (container_label_com_docker_compose_project, container_label_com_docker_compose_service) (container_memory_working_set_bytes{image!=\"\", id=~\"/docker/.+\", container_label_com_docker_compose_service!=\"\"})",
+          "expr": "sum by (container_label_com_docker_compose_project, container_label_com_docker_compose_service) (container_memory_working_set_bytes{image!=\"\", container_label_com_docker_compose_service!=\"\"})",
           "legendFormat": "{{ container_label_com_docker_compose_project }}/{{ container_label_com_docker_compose_service }}",
           "refId": "A"
         }
@@ -215,5 +215,5 @@
   "timezone": "browser",
   "title": "Duty Overview",
   "uid": "duty-overview",
-  "version": 2
+  "version": 3
 }

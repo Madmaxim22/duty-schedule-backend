@@ -195,18 +195,25 @@ docker compose restart grafana
 
 **Важно:** ID **22479** на grafana.com — это **Shelly Pro 3EM** (умный счётчик), не Node Exporter. Скрипт использует **11074** для NAS.
 
-**Docker Cadvisor — No data:** cAdvisor по умолчанию **не отдаёт** labels Docker Compose. После `git pull` пересоздайте cAdvisor:
+**Docker Cadvisor — No data / count(container_cpu...)=0:** cAdvisor на OMV (cgroup v2) нужны **docker.sock** и **/sys/fs/cgroup**. После `git pull`:
 
 ```bash
 cd /srv/.../docker/monitoring
 docker compose up -d --force-recreate cadvisor
-sleep 60
-curl -sG 'http://127.0.0.1:9090/api/v1/query' --data-urlencode 'query=count(container_cpu_usage_seconds_total{id=~"/docker/.+"})'
-# ожидается result > 0
-docker compose restart grafana
+sleep 90
+sh scripts/verify-cadvisor.sh
 ```
 
-Дашборды: **Duty → Docker Containers** (рекомендуется) или **Duty Overview**. Community **Cadvisor exporter** (14282) использует устаревший фильтр `name=~".+"` — может оставаться пустым; сверху выберите **Host** = `cadvisor:8080`.
+Ожидается в п.3 `value` > 0 и в п.4 список сервисов (`api`, `db`, `grafana`, …). Затем `docker compose restart grafana`.
+
+Дашборды: **Duty → Docker Containers** или **Duty Overview**. Community **Cadvisor exporter** (14282) часто пустой — фильтр `name=~".+"` устарел.
+
+Ручная проверка:
+
+```bash
+curl -sG 'http://127.0.0.1:9090/api/v1/query' --data-urlencode 'query=count(container_cpu_usage_seconds_total{image!=""})'
+curl -sG 'http://127.0.0.1:9090/api/v1/label/container_label_com_docker_compose_service/values'
+```
 
 **Duty Overview** уже использует правильный datasource и не должен показывать эти ошибки.
 
