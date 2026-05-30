@@ -1,6 +1,14 @@
 #!/bin/sh
 # Скачивает community dashboards Grafana в provisioning/community/.
-# Запуск на NAS перед первым docker compose up -d (нужен curl и jq).
+# Запуск на NAS перед первым docker compose up -d (нужны curl и jq).
+#
+# Запуск (из каталога docker/monitoring):
+#   sh scripts/fetch-grafana-dashboards.sh
+# или:
+#   chmod +x scripts/fetch-grafana-dashboards.sh && ./scripts/fetch-grafana-dashboards.sh
+#
+# Если после git clone «Отказано в доступе» / sudo: command not found — CRLF:
+#   sed -i 's/\r$//' scripts/fetch-grafana-dashboards.sh
 
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

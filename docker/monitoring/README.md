@@ -43,7 +43,8 @@ cp .env.example .env
 nano .env   # GF_SECURITY_ADMIN_PASSWORD, POSTGRES_EXPORTER_DSN при смене пароля БД
 
 chmod +x scripts/fetch-grafana-dashboards.sh
-./scripts/fetch-grafana-dashboards.sh   # Node Exporter 1860, Docker 893, PostgreSQL 9628
+sed -i 's/\r$//' scripts/fetch-grafana-dashboards.sh 2>/dev/null || true
+sh scripts/fetch-grafana-dashboards.sh   # Node Exporter 1860, Docker 893, PostgreSQL 9628
 
 docker compose up -d
 docker compose ps
@@ -155,3 +156,13 @@ Community dashboards загружаются скриптом `scripts/fetch-graf
 **Пустые панели disk /srv:** на node_exporter mountpoint может быть `/host/root/srv/...` — запросы в dashboard учитывают оба варианта.
 
 **Prometheus targets после reboot:** дождитесь `nas-start.sh` (sleep 120) или `docker compose up -d` вручную.
+
+**`fetch-grafana-dashboards.sh`: Отказано в доступе / sudo: command not found** — нет `+x` или файл с CRLF (Windows). Из каталога `docker/monitoring`:
+
+```bash
+sed -i 's/\r$//' scripts/fetch-grafana-dashboards.sh
+chmod +x scripts/fetch-grafana-dashboards.sh
+sh scripts/fetch-grafana-dashboards.sh
+```
+
+`sudo` для этого скрипта не нужен — он только скачивает JSON в `grafana/provisioning/dashboards/community/`.

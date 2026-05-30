@@ -1,0 +1,2 @@
+# Shell-скрипты для NAS — только LF (иначе на Linux: «command not found» у shebang)
+*.sh text eol=lf
