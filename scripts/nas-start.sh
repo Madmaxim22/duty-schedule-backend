@@ -21,3 +21,9 @@ fi
 # Duty
 cd "$BASE/duty-schedule/duty-schedule-backend"
 docker compose up -d
+
+# Monitoring (Prometheus + Grafana), если установлен
+if [ -f "$BASE/docker/monitoring/docker-compose.yml" ]; then
+  cd "$BASE/docker/monitoring"
+  docker compose up -d
+fi

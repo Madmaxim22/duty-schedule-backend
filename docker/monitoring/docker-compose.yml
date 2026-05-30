@@ -1,0 +1,121 @@
+# Prometheus + Grafana — мониторинг NAS (OMV7) и стека Duty.
+# Развёртывание на NAS (рядом с NPM и Duty):
+#   docker network create duty-proxy   # один раз (если ещё нет)
+#   cd /srv/.../docker/monitoring
+#   cp .env.example .env && nano .env
+#   ./scripts/fetch-grafana-dashboards.sh   # опционально: community dashboards
+#   docker compose up -d
+# Grafana: http://127.0.0.1:3000 (LAN) или https://grafana.duty-w.ru через NPM
+# Prometheus / Alertmanager — только 127.0.0.1, не открывать в WAN
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:9090:9090'
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts:/etc/prometheus/alerts:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    networks:
+      - monitoring
+    depends_on:
+      - alertmanager
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:9093:9093'
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    networks:
+      - monitoring
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: monitoring-grafana
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:3000:3000'
+    env_file: .env
+    environment:
+      GF_SERVER_ROOT_URL: ${GF_SERVER_ROOT_URL:-https://grafana.duty-w.ru}
+      GF_SERVER_DOMAIN: ${GF_SERVER_DOMAIN:-grafana.duty-w.ru}
+      GF_SECURITY_ADMIN_USER: ${GF_SECURITY_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:-changeme}
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - monitoring
+      - duty-proxy
+    depends_on:
+      - prometheus
+
+  node_exporter:
+    image: prom/node-exporter:v1.8.2
+    restart: unless-stopped
+    pid: host
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/host/root'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc|run/docker/netns|var/lib/docker/.+|var/lib/kubelet/.+)($$|/)'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host/root:ro
+    networks:
+      - monitoring
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    restart: unless-stopped
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    networks:
+      - monitoring
+
+  postgres_exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_NAME: ${POSTGRES_EXPORTER_DSN:-postgresql://duty:duty@db:5432/duty_schedule?sslmode=disable}
+    networks:
+      - monitoring
+      - duty-internal
+
+  blackbox_exporter:
+    image: prom/blackbox-exporter:v0.25.0
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/blackbox_exporter/config.yml'
+    volumes:
+      - ./prometheus/blackbox.yml:/etc/blackbox_exporter/config.yml:ro
+    networks:
+      - monitoring
+      - duty-proxy
+
+volumes:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  monitoring:
+    driver: bridge
+  duty-proxy:
+    external: true
+  duty-internal:
+    external: true

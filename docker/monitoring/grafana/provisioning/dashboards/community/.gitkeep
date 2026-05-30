@@ -1,0 +1,3 @@
+# Placeholder — community dashboards (1860, 893, 9628) загружаются скриптом:
+#   ./scripts/fetch-grafana-dashboards.sh
+# Файлы .gitignore не игнорируются; каталог нужен для bind mount provisioning.

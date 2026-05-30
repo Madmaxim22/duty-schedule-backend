@@ -355,6 +355,8 @@ docker compose up -d --build
 
 Локально: **http://127.0.0.1:8080**. Production: **https://duty-w.ru** через Nginx Proxy Manager.
 
+Мониторинг NAS (Prometheus + Grafana): отдельный стек [docker/monitoring/](docker/monitoring/) — метрики хоста, контейнеров и PostgreSQL; Grafana на **https://grafana.duty-w.ru**.
+
 ## Структура проекта
 
 ```

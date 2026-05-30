@@ -1,0 +1,75 @@
+groups:
+  - name: duty_nas
+    rules:
+      - alert: DiskSpaceLow
+        expr: |
+          (
+            node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs", mountpoint=~"/srv.*|/host/root/srv.*"}
+            / node_filesystem_size_bytes{fstype!~"tmpfs|overlay|squashfs", mountpoint=~"/srv.*|/host/root/srv.*"}
+          ) * 100 < 15
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Мало места на диске {{ $labels.mountpoint }}'
+          description: 'Свободно {{ printf "%.1f" $value }}% на {{ $labels.mountpoint }}.'
+
+      - alert: DiskSpaceCritical
+        expr: |
+          (
+            node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs", mountpoint=~"/srv.*|/host/root/srv.*"}
+            / node_filesystem_size_bytes{fstype!~"tmpfs|overlay|squashfs", mountpoint=~"/srv.*|/host/root/srv.*"}
+          ) * 100 < 5
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Критически мало места на {{ $labels.mountpoint }}'
+          description: 'Свободно {{ printf "%.1f" $value }}%.'
+
+      - alert: HighMemory
+        expr: |
+          (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 90
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Высокая загрузка RAM на NAS'
+          description: 'Использовано {{ printf "%.1f" $value }}% памяти.'
+
+      - alert: DutyHealthFailed
+        expr: probe_success{job=~"blackbox_duty.*"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Health-check Duty недоступен'
+          description: 'Probe {{ $labels.instance }} не отвечает 2+ мин.'
+
+      - alert: PostgresDown
+        expr: pg_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'PostgreSQL Duty недоступен'
+          description: 'postgres_exporter не может подключиться к БД.'
+
+      - alert: SSLCertExpiringSoon
+        expr: (probe_ssl_earliest_cert_expiry{job="blackbox_duty_https"} - time()) / 86400 < 14
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: 'SSL-сертификат duty-w.ru истекает скоро'
+          description: 'Осталось {{ printf "%.0f" $value }} дней до истечения.'
+
+      - alert: DutyContainerMissing
+        expr: |
+          absent(container_last_seen{container_label_com_docker_compose_project="duty-schedule-backend", container_label_com_docker_compose_service="nginx"})
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Контейнер duty-nginx не обнаружен'
+          description: 'cAdvisor не видит nginx стека Duty 5+ мин.'
