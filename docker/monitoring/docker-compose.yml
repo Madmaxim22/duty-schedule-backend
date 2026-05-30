@@ -5,7 +5,7 @@
 #   cp .env.example .env && nano .env
 #   ./scripts/fetch-grafana-dashboards.sh   # опционально: community dashboards
 #   docker compose up -d
-# Grafana: http://127.0.0.1:3000 (LAN) или https://grafana.duty-w.ru через NPM
+# Grafana: http://<IP_NAS>:3000 (LAN) или https://grafana.duty-w.ru через NPM
 # Prometheus / Alertmanager — только 127.0.0.1, не открывать в WAN
 
 services:
@@ -43,7 +43,10 @@ services:
     container_name: monitoring-grafana
     restart: unless-stopped
     ports:
-      - '127.0.0.1:3000:3000'
+      # LAN: 0.0.0.0:3000. Только localhost: GRAFANA_HOST_BIND=127.0.0.1 в .env
+      - target: 3000
+        published: ${GRAFANA_PORT:-3000}
+        host_ip: ${GRAFANA_HOST_BIND:-0.0.0.0}
     env_file: .env
     environment:
       GF_SERVER_ROOT_URL: ${GF_SERVER_ROOT_URL:-https://grafana.duty-w.ru}

@@ -58,7 +58,9 @@ curl -s http://127.0.0.1:9090/api/v1/targets | grep -o '"health":"[^"]*"' | sort
 # ожидается "health":"up" для всех job
 ```
 
-Локально Grafana: `http://127.0.0.1:3000` (логин из `.env`).
+Локально Grafana: `http://<IP_NAS>:3000` (порт **3000**, не 8888). С NAS: `http://127.0.0.1:3000`. Логин из `.env`.
+
+> По умолчанию Grafana слушает **все интерфейсы** (`GRAFANA_HOST_BIND=0.0.0.0`). Порт **3000 не пробрасывать на роутере** — только LAN. Prometheus/Alertmanager остаются на 127.0.0.1.
 
 ## NPM Proxy Host (grafana.duty-w.ru)
 
@@ -131,7 +133,7 @@ Community dashboards загружаются скриптом `scripts/fetch-graf
 |--------|------|
 | Prometheus | 127.0.0.1:9090 |
 | Alertmanager | 127.0.0.1:9093 |
-| Grafana | 127.0.0.1:3000 (+ NPM :443) |
+| Grafana | `0.0.0.0:3000` (LAN) + NPM :443 — **не** пробрасывать 3000 в WAN |
 
 ## Автозапуск
 
@@ -166,3 +168,31 @@ sh scripts/fetch-grafana-dashboards.sh
 ```
 
 `sudo` для этого скрипта не нужен — он только скачивает JSON в `grafana/provisioning/dashboards/community/`.
+
+**Grafana недоступна из LAN (`192.168.x.x:3000`)** — в старых версиях compose порт был `127.0.0.1:3000` (только NAS). Обновите `docker-compose.yml`, в `.env` задайте `GRAFANA_HOST_BIND=0.0.0.0`, затем `docker compose up -d grafana`. Проверка на NAS: `curl -s -o /dev/null -w "%{http_code}" http://192.168.3.85:3000/login` → `200`. Порт **8888** — не Grafana. Firewall OMV: разрешить TCP **3000** из LAN при необходимости.
+
+**Редirect на grafana.duty-w.ru при входе по IP** — в `.env` временно `GF_SERVER_ROOT_URL=http://192.168.3.85:3000` или открывайте `https://grafana.duty-w.ru` из LAN (DNS на IP NAS).
+
+**`docker compose up -d`: TLS handshake timeout / failed to copy** — нестабильный канал до Docker Hub (CDN CloudFront). Часть образов уже скачана; повторите:
+
+```bash
+cd /srv/.../docker/monitoring
+docker compose pull
+docker compose up -d
+```
+
+Если снова обрывается — тяните по одному (можно несколько раз один и тот же):
+
+```bash
+docker pull prom/node-exporter:v1.8.2
+docker pull prom/prometheus:v2.53.0
+docker pull prom/alertmanager:v0.27.0
+docker pull grafana/grafana:11.2.0
+docker pull prom/blackbox-exporter:v0.25.0
+docker pull gcr.io/cadvisor/cadvisor:v0.49.1
+docker compose up -d
+```
+
+Проверка доступа к registry: `curl -I --max-time 15 https://registry-1.docker.io/v2/`
+
+При частых обрывах на OMV: **Services → Compose → Settings → Docker** или `/etc/docker/daemon.json` — зеркало registry (например Timeweb `https://dockerhub.timeweb.cloud`), затем `systemctl restart docker` и снова `docker compose pull`.
