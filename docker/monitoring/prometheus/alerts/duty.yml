@@ -66,10 +66,10 @@ groups:
 
       - alert: DutyContainerMissing
         expr: |
-          absent(container_last_seen{container_label_com_docker_compose_project="duty-schedule-backend", container_label_com_docker_compose_service="nginx"})
+          absent(docker_container_info{name=~".*duty-nginx.*"})
         for: 5m
         labels:
           severity: critical
         annotations:
           summary: 'Контейнер duty-nginx не обнаружен'
-          description: 'cAdvisor не видит nginx стека Duty 5+ мин.'
+          description: 'docker_exporter не видит duty-nginx 5+ мин.'

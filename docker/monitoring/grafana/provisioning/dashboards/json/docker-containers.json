@@ -8,18 +8,18 @@
   "panels": [
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": { "defaults": { "unit": "percentunit" } },
+      "fieldConfig": { "defaults": { "unit": "percent", "max": 100, "min": 0 } },
       "gridPos": { "h": 10, "w": 24, "x": 0, "y": 0 },
       "id": 1,
       "options": { "legend": { "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
       "targets": [
         {
-          "expr": "sum by (container_label_com_docker_compose_project, container_label_com_docker_compose_service) (rate(container_cpu_usage_seconds_total{image!=\"\", container_label_com_docker_compose_service!=\"\"}[5m]))",
-          "legendFormat": "{{ container_label_com_docker_compose_project }}/{{ container_label_com_docker_compose_service }}",
+          "expr": "docker_container_cpu_usage_percentage",
+          "legendFormat": "{{ name }}",
           "refId": "A"
         }
       ],
-      "title": "CPU by compose service",
+      "title": "CPU by container (%)",
       "type": "timeseries"
     },
     {
@@ -30,12 +30,12 @@
       "options": { "legend": { "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
       "targets": [
         {
-          "expr": "sum by (container_label_com_docker_compose_project, container_label_com_docker_compose_service) (container_memory_working_set_bytes{image!=\"\", container_label_com_docker_compose_service!=\"\"})",
-          "legendFormat": "{{ container_label_com_docker_compose_project }}/{{ container_label_com_docker_compose_service }}",
+          "expr": "docker_container_memory_usage_bytes",
+          "legendFormat": "{{ name }}",
           "refId": "A"
         }
       ],
-      "title": "Memory by compose service",
+      "title": "Memory by container",
       "type": "timeseries"
     },
     {
@@ -45,8 +45,8 @@
       "id": 3,
       "targets": [
         {
-          "expr": "sum by (container_label_com_docker_compose_service) (rate(container_network_receive_bytes_total{image!=\"\", container_label_com_docker_compose_service!=\"\"}[5m]))",
-          "legendFormat": "{{ container_label_com_docker_compose_service }}",
+          "expr": "sum by (name) (rate(docker_container_network_rx_bytes[5m]))",
+          "legendFormat": "{{ name }}",
           "refId": "A"
         }
       ],
@@ -60,8 +60,8 @@
       "id": 4,
       "targets": [
         {
-          "expr": "sum by (container_label_com_docker_compose_service) (rate(container_network_transmit_bytes_total{image!=\"\", container_label_com_docker_compose_service!=\"\"}[5m]))",
-          "legendFormat": "{{ container_label_com_docker_compose_service }}",
+          "expr": "sum by (name) (rate(docker_container_network_tx_bytes[5m]))",
+          "legendFormat": "{{ name }}",
           "refId": "A"
         }
       ],
@@ -71,11 +71,11 @@
   ],
   "refresh": "30s",
   "schemaVersion": 39,
-  "tags": ["docker", "cadvisor", "duty"],
+  "tags": ["docker", "duty"],
   "templating": { "list": [] },
   "time": { "from": "now-6h", "to": "now" },
   "timezone": "browser",
   "title": "Docker Containers",
   "uid": "duty-docker-containers",
-  "version": 2
+  "version": 3
 }

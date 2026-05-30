@@ -159,23 +159,18 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": { "defaults": { "unit": "percentunit" } },
+      "fieldConfig": { "defaults": { "unit": "percent", "max": 100, "min": 0 } },
       "gridPos": { "h": 8, "w": 24, "x": 0, "y": 12 },
       "id": 7,
       "options": { "legend": { "displayMode": "table" }, "tooltip": { "mode": "multi" } },
       "targets": [
         {
-          "expr": "sum by (container_label_com_docker_compose_project, container_label_com_docker_compose_service) (rate(container_cpu_usage_seconds_total{image!=\"\", container_label_com_docker_compose_service!=\"\"}[5m]))",
-          "legendFormat": "{{ container_label_com_docker_compose_project }}/{{ container_label_com_docker_compose_service }}",
+          "expr": "docker_container_cpu_usage_percentage",
+          "legendFormat": "{{ name }}",
           "refId": "A"
-        },
-        {
-          "expr": "sum by (id) (rate(container_cpu_usage_seconds_total{id=~\"/system.slice/docker-.*\\\\.scope\", cpu=\"total\", image=\"\"}[5m]))",
-          "legendFormat": "{{ id }}",
-          "refId": "B"
         }
       ],
-      "title": "Container CPU (Duty + monitoring + NPM)",
+      "title": "Container CPU (docker_exporter)",
       "type": "timeseries"
     },
     {
@@ -186,8 +181,8 @@
       "options": { "legend": { "displayMode": "table" }, "tooltip": { "mode": "multi" } },
       "targets": [
         {
-          "expr": "sum by (container_label_com_docker_compose_project, container_label_com_docker_compose_service) (container_memory_working_set_bytes{image!=\"\", container_label_com_docker_compose_service!=\"\"})",
-          "legendFormat": "{{ container_label_com_docker_compose_project }}/{{ container_label_com_docker_compose_service }}",
+          "expr": "docker_container_memory_usage_bytes",
+          "legendFormat": "{{ name }}",
           "refId": "A"
         }
       ],
@@ -220,5 +215,5 @@
   "timezone": "browser",
   "title": "Duty Overview",
   "uid": "duty-overview",
-  "version": 4
+  "version": 5
 }

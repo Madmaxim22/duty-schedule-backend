@@ -43,9 +43,9 @@ fetch() {
     > "$OUT/${name}.json"
 }
 
-# 11074 — Node Exporter NAS (НЕ 22479 — Shelly Pro 3EM)
+# 11074 — Node Exporter NAS
 fetch 11074 node-exporter-full
-fetch 14282 docker-cadvisor
+# 14282 Cadvisor — не используется (OMV containerd snapshotter); см. Duty → Docker Containers
 fetch 14114 postgresql-database
 
 echo "Done. Dashboards saved to $OUT"
