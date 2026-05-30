@@ -79,13 +79,21 @@ services:
     networks:
       - monitoring
 
-  docker_exporter:
-    # OMV + containerd snapshotter: cAdvisor не работает (нет docker/image/layerdb)
-    image: ghcr.io/davidborzek/docker-exporter:latest
+  dockerprom:
+    # OMV + containerd snapshotter: cAdvisor и docker.sock-exporter не дают метрик
+    image: ghcr.io/nikolabura/dockerprom:master
     restart: unless-stopped
-    user: root
+    command:
+      - -l
+      - '0.0.0.0:3000'
+      - -d
+      - /docker-containers
+      - -c
+      - /sys/fs/cgroup
+      - --include-labels=com.docker.compose.project,com.docker.compose.service
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+      - ${DOCKER_CONTAINERS_DIR:-/srv/dev-disk-by-uuid-7b779ac5-3f1c-4c5d-98bc-5ed97247f35c/docker/containers}:/docker-containers:ro
     networks:
       - monitoring
 

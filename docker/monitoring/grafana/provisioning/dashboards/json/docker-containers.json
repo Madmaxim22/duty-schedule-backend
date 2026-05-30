@@ -8,18 +8,18 @@
   "panels": [
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": { "defaults": { "unit": "percent", "max": 100, "min": 0 } },
+      "fieldConfig": { "defaults": { "unit": "percentunit" } },
       "gridPos": { "h": 10, "w": 24, "x": 0, "y": 0 },
       "id": 1,
       "options": { "legend": { "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
       "targets": [
         {
-          "expr": "docker_container_cpu_usage_percentage",
-          "legendFormat": "{{ name }}",
+          "expr": "sum by (container_label_com_docker_compose_project, container_label_com_docker_compose_service, name) (rate(container_cpu_user_total[5m]) + rate(container_cpu_system_total[5m]))",
+          "legendFormat": "{{ container_label_com_docker_compose_project }}/{{ container_label_com_docker_compose_service }} ({{ name }})",
           "refId": "A"
         }
       ],
-      "title": "CPU by container (%)",
+      "title": "CPU by container",
       "type": "timeseries"
     },
     {
@@ -30,7 +30,7 @@
       "options": { "legend": { "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
       "targets": [
         {
-          "expr": "docker_container_memory_usage_bytes",
+          "expr": "container_memory_usage",
           "legendFormat": "{{ name }}",
           "refId": "A"
         }
@@ -45,12 +45,12 @@
       "id": 3,
       "targets": [
         {
-          "expr": "sum by (name) (rate(docker_container_network_rx_bytes[5m]))",
+          "expr": "sum by (name) (rate(container_blkio_read_total[5m]))",
           "legendFormat": "{{ name }}",
           "refId": "A"
         }
       ],
-      "title": "Network RX",
+      "title": "Disk read",
       "type": "timeseries"
     },
     {
@@ -60,12 +60,12 @@
       "id": 4,
       "targets": [
         {
-          "expr": "sum by (name) (rate(docker_container_network_tx_bytes[5m]))",
+          "expr": "sum by (name) (rate(container_blkio_write_total[5m]))",
           "legendFormat": "{{ name }}",
           "refId": "A"
         }
       ],
-      "title": "Network TX",
+      "title": "Disk write",
       "type": "timeseries"
     }
   ],
@@ -77,5 +77,5 @@
   "timezone": "browser",
   "title": "Docker Containers",
   "uid": "duty-docker-containers",
-  "version": 3
+  "version": 4
 }

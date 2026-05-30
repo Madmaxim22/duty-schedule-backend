@@ -159,18 +159,18 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": { "defaults": { "unit": "percent", "max": 100, "min": 0 } },
+      "fieldConfig": { "defaults": { "unit": "percentunit" } },
       "gridPos": { "h": 8, "w": 24, "x": 0, "y": 12 },
       "id": 7,
       "options": { "legend": { "displayMode": "table" }, "tooltip": { "mode": "multi" } },
       "targets": [
         {
-          "expr": "docker_container_cpu_usage_percentage",
-          "legendFormat": "{{ name }}",
+          "expr": "sum by (container_label_com_docker_compose_project, container_label_com_docker_compose_service, name) (rate(container_cpu_user_total[5m]) + rate(container_cpu_system_total[5m]))",
+          "legendFormat": "{{ container_label_com_docker_compose_project }}/{{ container_label_com_docker_compose_service }}",
           "refId": "A"
         }
       ],
-      "title": "Container CPU (docker_exporter)",
+      "title": "Container CPU (dockerprom)",
       "type": "timeseries"
     },
     {
@@ -181,7 +181,7 @@
       "options": { "legend": { "displayMode": "table" }, "tooltip": { "mode": "multi" } },
       "targets": [
         {
-          "expr": "docker_container_memory_usage_bytes",
+          "expr": "container_memory_usage",
           "legendFormat": "{{ name }}",
           "refId": "A"
         }
@@ -215,5 +215,5 @@
   "timezone": "browser",
   "title": "Duty Overview",
   "uid": "duty-overview",
-  "version": 5
+  "version": 6
 }

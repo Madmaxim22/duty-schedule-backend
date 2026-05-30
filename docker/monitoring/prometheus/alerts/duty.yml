@@ -66,10 +66,10 @@ groups:
 
       - alert: DutyContainerMissing
         expr: |
-          absent(docker_container_info{name=~".*duty-nginx.*"})
+          absent(container_memory_usage{name=~".*duty-nginx.*"})
         for: 5m
         labels:
           severity: critical
         annotations:
           summary: 'Контейнер duty-nginx не обнаружен'
-          description: 'docker_exporter не видит duty-nginx 5+ мин.'
+          description: 'dockerprom не видит duty-nginx 5+ мин.'

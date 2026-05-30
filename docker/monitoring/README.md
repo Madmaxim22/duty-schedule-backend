@@ -94,7 +94,7 @@ GF_SERVER_DOMAIN=grafana.duty-w.ru
 
 | Dashboard | Источник | Содержание |
 |-----------|----------|------------|
-| Duty Overview | provisioning (json/) | health, SSL, disk /srv, контейнеры (docker_exporter) |
+| Duty Overview | provisioning (json/) | health, SSL, disk /srv, контейнеры (dockerprom) |
 | Docker Containers | provisioning (json/) | CPU/RAM/network всех контейнеров |
 | Node Exporter Full | grafana.com/11074 | CPU, RAM, disk, network хоста |
 | PostgreSQL | grafana.com/14114 | БД duty_schedule |
@@ -103,16 +103,19 @@ Community dashboards загружаются скриптом `scripts/fetch-graf
 
 ## Контейнеры Docker (OMV + containerd snapshotter)
 
-На OMV 7 Docker часто использует **`driver-type: io.containerd.snapshotter.v1`** — каталога `docker/image/` нет, **cAdvisor не работает**.
+На OMV 7 Docker часто использует **`driver-type: io.containerd.snapshotter.v1`** — **cAdvisor не работает**. Метрики контейнеров — **`dockerprom`** (cgroup + каталог `docker/containers/` на HDD).
 
-Вместо cAdvisor — **`docker_exporter`** (Docker API через `/var/run/docker.sock`).
+В `.env`:
+```env
+DOCKER_CONTAINERS_DIR=/srv/dev-disk-by-uuid-7b779ac5-3f1c-4c5d-98bc-5ed97247f35c/docker/containers
+```
 
 Проверка:
-
 ```bash
 sh scripts/verify-docker-metrics.sh
-# п.2 count(docker_container_info) > 0
-# п.3 — api, db, duty-nginx, grafana, …
+# п.2 — строки container_memory_usage в dockerprom
+# п.3 — count > 0
+# п.4 — duty-nginx, api, db, …
 ```
 
 Дашборды: **Duty → Docker Containers**, **Duty Overview** (панели Container CPU / memory).
@@ -129,7 +132,7 @@ sh scripts/verify-docker-metrics.sh
 | DutyHealthFailed | blackbox probe fail |
 | PostgresDown | pg_up == 0 |
 | SSLCertExpiringSoon | &lt; 14 дней |
-| DutyContainerMissing | duty-nginx не виден docker_exporter |
+| DutyContainerMissing | duty-nginx не виден dockerprom |
 
 Для Telegram/email отредактируйте `alertmanager/alertmanager.yml` (webhook_configs / email_configs).
 
@@ -211,15 +214,16 @@ docker compose restart grafana
 
 **Важно:** ID **22479** на grafana.com — это **Shelly Pro 3EM** (умный счётчик), не Node Exporter. Скрипт использует **11074** для NAS.
 
-**Контейнеры — No data (OMV containerd snapshotter):** cAdvisor **не поддерживается** (`driver-type: io.containerd.snapshotter.v1`, нет `docker/image/`). Используется **docker_exporter**:
+**Контейнеры — No data (OMV containerd snapshotter):** используется **dockerprom** (не cAdvisor, не docker_exporter):
 
 ```bash
 cd /srv/.../docker/monitoring
 git pull
-docker compose stop cadvisor 2>/dev/null || true
-docker compose rm -f cadvisor 2>/dev/null || true
-docker compose up -d docker_exporter prometheus grafana
-sleep 30
+grep DOCKER_CONTAINERS_DIR .env || echo 'DOCKER_CONTAINERS_DIR=/srv/dev-disk-by-uuid-7b779ac5-3f1c-4c5d-98bc-5ed97247f35c/docker/containers' >> .env
+docker compose stop cadvisor docker_exporter 2>/dev/null || true
+docker compose rm -f cadvisor docker_exporter 2>/dev/null || true
+docker compose up -d dockerprom prometheus grafana
+sleep 45
 sh scripts/verify-docker-metrics.sh
 ```
 
@@ -243,7 +247,7 @@ docker pull prom/prometheus:v2.53.0
 docker pull prom/alertmanager:v0.27.0
 docker pull grafana/grafana:11.2.0
 docker pull prom/blackbox-exporter:v0.25.0
-docker pull ghcr.io/davidborzek/docker-exporter:latest
+docker pull ghcr.io/nikolabura/dockerprom:master
 docker compose up -d
 ```
 
