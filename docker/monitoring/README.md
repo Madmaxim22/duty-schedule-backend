@@ -184,6 +184,17 @@ docker compose restart grafana
 
 Кнопка **Try migration** в UI иногда помогает, но надёжнее перекачать JSON.
 
+**`Datasource ${DS_PROMETHEUS} was not found`** — community-JSON с grafana.com содержит плейсхолдер `${DS_PROMETHEUS}`; при file provisioning он не подставляется. Перекачайте дашборды (скрипт теперь прописывает uid `prometheus`):
+
+```bash
+cd /srv/.../docker/monitoring
+git pull
+sh scripts/fetch-grafana-dashboards.sh
+docker compose restart grafana
+```
+
+**Duty Overview** уже использует правильный datasource и не должен показывать эту ошибку.
+
 **`docker compose up -d`: TLS handshake timeout / failed to copy** — нестабильный канал до Docker Hub (CDN CloudFront). Часть образов уже скачана; повторите:
 
 ```bash
