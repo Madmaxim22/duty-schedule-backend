@@ -195,7 +195,18 @@ docker compose restart grafana
 
 **Важно:** ID **22479** на grafana.com — это **Shelly Pro 3EM** (умный счётчик), не Node Exporter. Скрипт использует **11074** для NAS.
 
-**Docker Cadvisor — No data:** сверху дашборда выберите **Host** = `cadvisor:8080`, **Container** = `All`. Если пусто — смотрите контейнеры в **Duty → Duty Overview** (наши запросы под compose labels).
+**Docker Cadvisor — No data:** cAdvisor по умолчанию **не отдаёт** labels Docker Compose. После `git pull` пересоздайте cAdvisor:
+
+```bash
+cd /srv/.../docker/monitoring
+docker compose up -d --force-recreate cadvisor
+sleep 60
+curl -sG 'http://127.0.0.1:9090/api/v1/query' --data-urlencode 'query=count(container_cpu_usage_seconds_total{id=~"/docker/.+"})'
+# ожидается result > 0
+docker compose restart grafana
+```
+
+Дашборды: **Duty → Docker Containers** (рекомендуется) или **Duty Overview**. Community **Cadvisor exporter** (14282) использует устаревший фильтр `name=~".+"` — может оставаться пустым; сверху выберите **Host** = `cadvisor:8080`.
 
 **Duty Overview** уже использует правильный datasource и не должен показывать эти ошибки.
 

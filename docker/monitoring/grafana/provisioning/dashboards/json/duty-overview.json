@@ -165,8 +165,8 @@
       "options": { "legend": { "displayMode": "table" }, "tooltip": { "mode": "multi" } },
       "targets": [
         {
-          "expr": "sum by (container_label_com_docker_compose_service) (rate(container_cpu_usage_seconds_total{container_label_com_docker_compose_project=~\"duty-schedule-backend|monitoring|npm\", container_label_com_docker_compose_service!=\"\"}[5m]))",
-          "legendFormat": "{{ container_label_com_docker_compose_service }}",
+          "expr": "sum by (container_label_com_docker_compose_project, container_label_com_docker_compose_service) (rate(container_cpu_usage_seconds_total{image!=\"\", id=~\"/docker/.+\", container_label_com_docker_compose_service!=\"\"}[5m]))",
+          "legendFormat": "{{ container_label_com_docker_compose_project }}/{{ container_label_com_docker_compose_service }}",
           "refId": "A"
         }
       ],
@@ -181,8 +181,8 @@
       "options": { "legend": { "displayMode": "table" }, "tooltip": { "mode": "multi" } },
       "targets": [
         {
-          "expr": "sum by (container_label_com_docker_compose_service) (container_memory_working_set_bytes{container_label_com_docker_compose_project=~\"duty-schedule-backend|monitoring|npm\", container_label_com_docker_compose_service!=\"\"})",
-          "legendFormat": "{{ container_label_com_docker_compose_service }}",
+          "expr": "sum by (container_label_com_docker_compose_project, container_label_com_docker_compose_service) (container_memory_working_set_bytes{image!=\"\", id=~\"/docker/.+\", container_label_com_docker_compose_service!=\"\"})",
+          "legendFormat": "{{ container_label_com_docker_compose_project }}/{{ container_label_com_docker_compose_service }}",
           "refId": "A"
         }
       ],
@@ -215,5 +215,5 @@
   "timezone": "browser",
   "title": "Duty Overview",
   "uid": "duty-overview",
-  "version": 1
+  "version": 2
 }
