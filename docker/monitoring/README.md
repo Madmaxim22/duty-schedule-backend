@@ -10,8 +10,11 @@ Prometheus, Alertmanager и exporters слушают только **127.0.0.1** 
 
 | Назначение | Путь |
 |------------|------|
-| Корень monitoring | `/srv/dev-disk-by-uuid-7b779ac5-3f1c-4c5d-98bc-5ed97247f35c/docker_data/docker/monitoring/` |
+| Корень monitoring (из git) | `/srv/dev-disk-by-uuid-7b779ac5-3f1c-4c5d-98bc-5ed97247f35c/docker_data/duty-schedule/duty-schedule-backend/docker/monitoring/` |
+| Legacy (копия, не использовать вместе с git) | `/srv/dev-disk-by-uuid-7b779ac5-3f1c-4c5d-98bc-5ed97247f35c/docker_data/docker/monitoring/` |
 | Duty backend | `/srv/dev-disk-by-uuid-7b779ac5-3f1c-4c5d-98bc-5ed97247f35c/docker_data/duty-schedule/duty-schedule-backend/` |
+
+> **Важно:** работайте только из **одного** каталога monitoring. Если раньше копировали в `docker/monitoring/`, остановите старый стек: `cd .../docker/monitoring && docker compose down`, затем поднимайте из git-пути (см. ниже).
 
 ## Быстрый старт на OMV
 
@@ -33,10 +36,7 @@ docker network ls | grep duty
 
 ```bash
 BASE=/srv/dev-disk-by-uuid-7b779ac5-3f1c-4c5d-98bc-5ed97247f35c/docker_data
-MON_ROOT="$BASE/docker/monitoring"
-
-mkdir -p "$MON_ROOT"
-# скопируйте содержимое duty-schedule-backend/docker/monitoring/ в $MON_ROOT
+MON_ROOT="$BASE/duty-schedule/duty-schedule-backend/docker/monitoring"
 
 cd "$MON_ROOT"
 cp .env.example .env
@@ -103,11 +103,11 @@ Community dashboards загружаются скриптом `scripts/fetch-graf
 
 ## Контейнеры Docker (OMV + containerd snapshotter)
 
-На OMV 7 Docker часто использует **`driver-type: io.containerd.snapshotter.v1`** — **cAdvisor не работает**. Метрики контейнеров — **`dockerprom`** (cgroup + каталог `docker/containers/` на HDD).
+На OMV 7 Docker часто использует **`driver-type: io.containerd.snapshotter.v1`** — **cAdvisor не работает**. Метрики контейнеров — **`dockerprom`** (cgroup; каталог `docker/containers/` на snapshotter часто **отсутствует** — это нормально).
 
-В `.env`:
+Опционально в `.env` (если каталог есть: `find $(docker info -f '{{.DockerRootDir}}') -name containers -type d`):
 ```env
-DOCKER_CONTAINERS_DIR=/srv/dev-disk-by-uuid-7b779ac5-3f1c-4c5d-98bc-5ed97247f35c/docker/containers
+# DOCKER_CONTAINERS_DIR=/srv/.../docker/containers
 ```
 
 Проверка:
@@ -213,6 +213,23 @@ docker compose restart grafana
 ```
 
 **Важно:** ID **22479** на grafana.com — это **Shelly Pro 3EM** (умный счётчик), не Node Exporter. Скрипт использует **11074** для NAS.
+
+**Prometheus всё ещё скрейпит cadvisor / п.3 пустой, п.2 OK:** конфиг не обновился (часто два каталога monitoring). Из **git-пути**:
+
+```bash
+cd /srv/.../duty-schedule/duty-schedule-backend/docker/monitoring
+git pull
+docker compose stop cadvisor docker_exporter 2>/dev/null || true
+docker compose rm -f cadvisor docker_exporter 2>/dev/null || true
+docker compose up -d --force-recreate prometheus dockerprom
+curl -X POST http://127.0.0.1:9090/-/reload || docker compose restart prometheus
+sleep 30
+docker exec monitoring-prometheus-1 grep job_name /etc/prometheus/prometheus.yml
+sh scripts/verify-docker-metrics.sh
+# п.1 — job docker, health up; п.3 — count > 0
+```
+
+Если в п.6 mount source указывает на `.../docker/monitoring/` — остановите legacy: `cd .../docker/monitoring && docker compose down`.
 
 **Контейнеры — No data (OMV containerd snapshotter):** используется **dockerprom** (не cAdvisor, не docker_exporter):
 

@@ -23,7 +23,11 @@ cd "$BASE/duty-schedule/duty-schedule-backend"
 docker compose up -d
 
 # Monitoring (Prometheus + Grafana), если установлен
-if [ -f "$BASE/docker/monitoring/docker-compose.yml" ]; then
-  cd "$BASE/docker/monitoring"
+MON_DIR="$BASE/duty-schedule/duty-schedule-backend/docker/monitoring"
+if [ ! -f "$MON_DIR/docker-compose.yml" ]; then
+  MON_DIR="$BASE/docker/monitoring"
+fi
+if [ -f "$MON_DIR/docker-compose.yml" ]; then
+  cd "$MON_DIR"
   docker compose up -d
 fi
