@@ -8,6 +8,7 @@ import {
   listApprovedUsersForDate,
   listPendingUsers,
   updateUserStatus,
+  updateUserRole,
   deleteUser,
 } from './users.service.js';
 import { dateParamSchema } from '../schedule/schedule.schemas.js';
@@ -34,12 +35,20 @@ usersRouter.get('/pending', async (_req, res, next) => {
   }
 });
 
-usersRouter.patch('/:id', async (req, res, next) => {
+usersRouter.patch('/:id', async (req: AuthRequest, res, next) => {
   try {
+    const id = z.string().uuid().parse(req.params.id);
     const body = z
-      .object({ action: z.enum(['approve', 'reject']) })
+      .object({
+        action: z.enum(['approve', 'reject', 'promote', 'demote']),
+      })
       .parse(req.body);
-    const user = await updateUserStatus(req.params.id, body.action);
+
+    const user =
+      body.action === 'promote' || body.action === 'demote'
+        ? await updateUserRole(id, body.action, req.user!.sub)
+        : await updateUserStatus(id, body.action);
+
     res.json({ user });
   } catch (e) {
     next(e);

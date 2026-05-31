@@ -8,6 +8,7 @@ import {
   isValidSlot,
 } from '../../lib/offices.js';
 import { AppError } from '../../lib/errors.js';
+import { getDayRevision, incrementDayRevision, lockDayRevision } from '../../lib/duty-day-revision.js';
 import { recordDutySlotChange } from '../../lib/record-duty-slot-change.js';
 import {
   dispatchNotification,
@@ -204,7 +205,7 @@ export async function getMonthSchedule(
 export async function getDaySchedule(dateStr: string, currentUserId?: string) {
   const dutyDate = parseDate(dateStr);
 
-  const [assignments, myAbsence] = await Promise.all([
+  const [assignments, myAbsence, revision] = await Promise.all([
     prisma.dutyAssignment.findMany({
       where: { dutyDate },
       include: {
@@ -230,6 +231,7 @@ export async function getDaySchedule(dateStr: string, currentUserId?: string) {
           },
         })
       : Promise.resolve(null),
+    getDayRevision(dutyDate),
   ]);
 
   const byKey = new Map(
@@ -256,6 +258,7 @@ export async function getDaySchedule(dateStr: string, currentUserId?: string) {
 
   return {
     date: dateStr,
+    revision,
     sections,
     warnings,
     ...(myAbsence ? { myAbsence: { type: myAbsence.absenceType } } : {}),
@@ -266,6 +269,7 @@ export async function putDaySchedule(
   dateStr: string,
   assignments: Array<{ section: 'A' | 'B'; office: string; userId: string | null }>,
   adminId: string,
+  expectedRevision: number,
 ) {
   const dutyDate = parseDate(dateStr);
   const expectedSlots = getAllSlots();
@@ -314,16 +318,24 @@ export async function putDaySchedule(
     }
   }
 
-  const existingAssignments = await prisma.dutyAssignment.findMany({
-    where: { dutyDate },
-  });
-  const existingByKey = new Map(
-    existingAssignments.map((a) => [`${a.section}-${a.office}`, a]),
-  );
-
   const changeIds: string[] = [];
 
   await prisma.$transaction(async (tx) => {
+    const currentRevision = await lockDayRevision(tx, dutyDate);
+    if (currentRevision !== expectedRevision) {
+      throw new AppError(409, 'График на эту дату изменён другим администратором', {
+        currentRevision,
+        date: dateStr,
+      });
+    }
+
+    const existingAssignments = await tx.dutyAssignment.findMany({
+      where: { dutyDate },
+    });
+    const existingByKey = new Map(
+      existingAssignments.map((a) => [`${a.section}-${a.office}`, a]),
+    );
+
     for (const item of assignments) {
       const key = `${item.section}-${item.office}`;
       const previousUserId = existingByKey.get(key)?.userId ?? null;
@@ -355,6 +367,8 @@ export async function putDaySchedule(
     if (toCreate.length > 0) {
       await tx.dutyAssignment.createMany({ data: toCreate });
     }
+
+    await incrementDayRevision(tx, dutyDate, adminId, currentRevision);
   });
 
   for (const changeId of changeIds) {

@@ -4,6 +4,7 @@ import { prisma } from '../../lib/prisma.js';
 import { matchFioToUserId, buildUserFioIndex } from '../../lib/match-user-by-fio.js';
 import { mapDutyTitle } from '../../lib/map-duty-title.js';
 import { recordDutySlotChange } from '../../lib/record-duty-slot-change.js';
+import { bumpDayRevisionsInRange } from '../../lib/duty-day-revision.js';
 import {
   dispatchNotification,
   notifyDutyAssignmentChange,
@@ -172,6 +173,8 @@ export async function importSchedule(
   const changeIds: string[] = [];
 
   await prisma.$transaction(async (tx) => {
+    await bumpDayRevisionsInRange(tx, replaceFrom, replaceTo, input.adminId);
+
     if (matchedUserIds.size > 0) {
       await tx.userAbsence.deleteMany({
         where: {

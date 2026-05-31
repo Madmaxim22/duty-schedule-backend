@@ -99,6 +99,55 @@ export async function listAllUsers() {
   });
 }
 
+const userRoleSelect = {
+  id: true,
+  email: true,
+  fullName: true,
+  role: true,
+  status: true,
+} as const;
+
+export async function updateUserRole(
+  userId: string,
+  action: 'promote' | 'demote',
+  actorId: string,
+) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) {
+    throw new AppError(404, 'Пользователь не найден');
+  }
+
+  if (action === 'promote') {
+    if (user.role === 'admin') {
+      throw new AppError(400, 'Пользователь уже администратор');
+    }
+    if (user.status !== 'approved') {
+      throw new AppError(400, 'Можно назначить администратором только одобренного пользователя');
+    }
+  } else {
+    if (user.role !== 'admin') {
+      throw new AppError(400, 'Пользователь не является администратором');
+    }
+    if (user.id === actorId) {
+      throw new AppError(400, 'Нельзя снять права администратора с себя');
+    }
+    const adminCount = await prisma.user.count({ where: { role: 'admin' } });
+    if (adminCount <= 1) {
+      throw new AppError(400, 'Нельзя снять права у единственного администратора');
+    }
+  }
+
+  const updated = await prisma.user.update({
+    where: { id: userId },
+    data: { role: action === 'promote' ? 'admin' : 'user' },
+    select: userRoleSelect,
+  });
+
+  await prisma.refreshToken.deleteMany({ where: { userId } });
+
+  return updated;
+}
+
 export async function updateUserStatus(
   userId: string,
   action: 'approve' | 'reject',

@@ -8,6 +8,7 @@ export const monthQuerySchema = z.object({
 export const dateParamSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 export const putDaySchema = z.object({
+  expectedRevision: z.number().int().min(0),
   assignments: z.array(
     z.object({
       section: z.enum(['A', 'B']),

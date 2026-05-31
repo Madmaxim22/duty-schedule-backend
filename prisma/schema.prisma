@@ -94,6 +94,7 @@ model User {
   chatMessageHides          ChatMessageUserHide[]
   chatAttachmentsUploaded   ChatMessageAttachment[]   @relation("ChatAttachmentUploader")
   authEvents                AuthEvent[]
+  dutyDayRevisionsUpdated   DutyDayRevision[]
 
   @@index([lastActiveAt])
   @@map("users")
@@ -189,6 +190,17 @@ model DutyAssignment {
   @@index([dutyDate])
   @@index([userId, dutyDate])
   @@map("duty_assignments")
+}
+
+model DutyDayRevision {
+  dutyDate  DateTime @id @map("duty_date") @db.Date
+  revision  Int      @default(0)
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by")
+
+  updater User? @relation(fields: [updatedBy], references: [id], onDelete: SetNull)
+
+  @@map("duty_day_revisions")
 }
 
 model UserAbsence {

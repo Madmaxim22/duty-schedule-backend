@@ -91,7 +91,12 @@ scheduleRouter.put(
     try {
       const date = dateParamSchema.parse(req.params.date);
       const body = putDaySchema.parse(req.body);
-      const data = await putDaySchedule(date, body.assignments, req.user!.sub);
+      const data = await putDaySchedule(
+        date,
+        body.assignments,
+        req.user!.sub,
+        body.expectedRevision,
+      );
       res.json(data);
     } catch (e) {
       next(e);
