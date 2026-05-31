@@ -34,6 +34,67 @@ function wauWindow(year: number, month: number) {
 
 type DayCountRow = { day: Date; count: bigint };
 type DayUserRow = { day: Date; user_id: string };
+type DayUserCountRow = { day: Date; user_id: string; count: bigint };
+
+function mapDayUserCounts(rows: DayUserCountRow[]): Map<string, Map<string, number>> {
+  const map = new Map<string, Map<string, number>>();
+  for (const row of rows) {
+    const day = formatDate(row.day);
+    const byUser = map.get(day) ?? new Map<string, number>();
+    byUser.set(row.user_id, Number(row.count));
+    map.set(day, byUser);
+  }
+  return map;
+}
+
+function pickLoginUsersByDay(
+  authByDay: Map<string, Map<string, number>>,
+  refreshByDay: Map<string, Map<string, number>>,
+  loginCountsByDay: Map<string, number>,
+  hasAuthEvents: boolean,
+  dayList: string[],
+): Map<string, Map<string, number>> {
+  if (!hasAuthEvents) {
+    return refreshByDay;
+  }
+  const result = new Map<string, Map<string, number>>();
+  for (const day of dayList) {
+    const authUsers = authByDay.get(day);
+    const authTotal = loginCountsByDay.get(day) ?? 0;
+    if (authTotal > 0 && authUsers) {
+      result.set(day, authUsers);
+    } else {
+      result.set(day, refreshByDay.get(day) ?? new Map());
+    }
+  }
+  return result;
+}
+
+function formatParticipants(
+  userCounts: Map<string, number> | undefined,
+  nameById: Map<string, string>,
+): Array<{ name: string; count: number }> {
+  if (!userCounts || userCounts.size === 0) return [];
+  return [...userCounts.entries()]
+    .map(([id, count]) => ({
+      name: nameById.get(id) ?? 'Неизвестный',
+      count,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+}
+
+function formatActiveParticipants(
+  ids: Set<string> | undefined,
+  nameById: Map<string, string>,
+): Array<{ name: string; count: number }> {
+  if (!ids || ids.size === 0) return [];
+  return [...ids]
+    .map((id) => ({
+      name: nameById.get(id) ?? 'Неизвестный',
+      count: 1,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+}
 
 function mapDayCounts(rows: DayCountRow[]): Map<string, number> {
   const map = new Map<string, number>();
@@ -115,7 +176,10 @@ export async function getAdminActivityStatistics(year: number, month: number) {
     registrationsMonth,
     chatMessagesByDay,
     chatAuthorsByDay,
+    chatMessagesByDayUser,
     lastActiveByDay,
+    authLoginsByDayUser,
+    refreshLoginsByDayUser,
     authLoginsByUser,
     refreshLoginsByUser,
     chatMessagesByUser,
@@ -164,11 +228,32 @@ export async function getAdminActivityStatistics(year: number, month: number) {
       WHERE deleted_at IS NULL
         AND created_at >= ${start} AND created_at <= ${end}
     `,
+    prisma.$queryRaw<DayUserCountRow[]>`
+      SELECT date_trunc('day', created_at)::date AS day, author_id AS user_id, COUNT(*)::bigint AS count
+      FROM chat_messages
+      WHERE deleted_at IS NULL
+        AND created_at >= ${start} AND created_at <= ${end}
+      GROUP BY 1, 2
+    `,
     prisma.$queryRaw<DayUserRow[]>`
       SELECT date_trunc('day', last_active_at)::date AS day, id AS user_id
       FROM users
       WHERE last_active_at IS NOT NULL
         AND last_active_at >= ${start} AND last_active_at <= ${end}
+    `,
+    prisma.$queryRaw<DayUserCountRow[]>`
+      SELECT date_trunc('day', created_at)::date AS day, user_id, COUNT(*)::bigint AS count
+      FROM auth_events
+      WHERE type = 'login'::"AuthEventType"
+        AND user_id IS NOT NULL
+        AND created_at >= ${start} AND created_at <= ${end}
+      GROUP BY 1, 2
+    `,
+    prisma.$queryRaw<DayUserCountRow[]>`
+      SELECT date_trunc('day', created_at)::date AS day, user_id, COUNT(*)::bigint AS count
+      FROM refresh_tokens
+      WHERE created_at >= ${start} AND created_at <= ${end}
+      GROUP BY 1, 2
     `,
     prisma.$queryRaw<Array<{ user_id: string; count: bigint }>>`
       SELECT user_id, COUNT(*)::bigint AS count
@@ -249,6 +334,9 @@ export async function getAdminActivityStatistics(year: number, month: number) {
   );
 
   const chatMsgDayMap = mapDayCounts(chatMessagesByDay);
+  const chatByDayUser = mapDayUserCounts(chatMessagesByDayUser);
+  const authLoginByDayUser = mapDayUserCounts(authLoginsByDayUser);
+  const refreshLoginByDayUser = mapDayUserCounts(refreshLoginsByDayUser);
   const activeFromChat = mapDayUserSets(chatAuthorsByDay);
   const activeFromLastActive = mapDayUserSets(lastActiveByDay);
 
@@ -278,9 +366,19 @@ export async function getAdminActivityStatistics(year: number, month: number) {
     WHERE created_at >= ${start} AND created_at <= ${end}
   `;
 
+  const nameById = new Map(approvedUsers.map((u) => [u.id, u.fullName]));
+
   const activeFromAuthLogins = mapDayUserSets(loginUsersByDay);
   const activeFromRefresh = mapDayUserSets(refreshUsersByDay);
   const activeLoginByDay = mergeActiveUsers(activeFromAuthLogins, activeFromRefresh);
+
+  const loginUsersByDayMap = pickLoginUsersByDay(
+    authLoginByDayUser,
+    refreshLoginByDayUser,
+    loginByDay,
+    authEventCount > 0,
+    dayList,
+  );
 
   const activeByDay = mergeActiveUsers(
     activeFromLastActive,
@@ -294,8 +392,11 @@ export async function getAdminActivityStatistics(year: number, month: number) {
   const daily = dayList.map((date) => ({
     date,
     activeUsers: activeByDay.get(date)?.size ?? 0,
+    activeParticipants: formatActiveParticipants(activeByDay.get(date), nameById),
     logins: loginByDay.get(date) ?? 0,
+    loginParticipants: formatParticipants(loginUsersByDayMap.get(date), nameById),
     chatMessages: chatMsgDayMap.get(date) ?? 0,
+    chatParticipants: formatParticipants(chatByDayUser.get(date), nameById),
   }));
 
   const todayKey = formatDate(new Date());
