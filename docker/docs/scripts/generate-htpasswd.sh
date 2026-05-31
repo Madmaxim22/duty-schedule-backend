@@ -19,6 +19,7 @@ stty echo
 printf "\n"
 
 docker run --rm httpd:alpine htpasswd -nbB "$USER" "$PASS" > .htpasswd
-chmod 600 .htpasswd
+# nginx в контейнере работает не от root — нужен o+r (600 даёт Permission denied)
+chmod 644 .htpasswd
 echo "Created $(pwd)/.htpasswd"
 echo "Restart: docker compose up -d --force-recreate"
