@@ -1,7 +1,5 @@
 # Nginx Proxy Manager для Duty
 
-[![GitHub Pages](https://img.shields.io/badge/demo-GitHub%20Pages-blue)](https://madmaxim22.github.io/duty-schedule/)
-
 Отдельный compose-стек: TLS на **443**, проксирование на контейнер Duty **`duty-nginx:80`**.
 
 NPM и Duty — **разные** compose-проекты. `127.0.0.1:8080` в Proxy Host **не работает** (502): для NPM это localhost своего контейнера, а не NAS. Используйте общую сеть `duty-proxy`.

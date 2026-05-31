@@ -1,7 +1,5 @@
 # DNS для duty-w.ru
 
-[![GitHub Pages](https://img.shields.io/badge/demo-GitHub%20Pages-blue)](https://madmaxim22.github.io/duty-schedule/)
-
 Настраивается **у регистратора домена** (не в репозитории).
 
 ## Записи

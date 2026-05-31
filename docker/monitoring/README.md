@@ -1,10 +1,10 @@
 # Мониторинг NAS (OMV7) — Prometheus + Grafana
 
-[![GitHub Pages](https://img.shields.io/badge/demo-GitHub%20Pages-blue)](https://madmaxim22.github.io/duty-schedule/)
-
 Отдельный Docker-стек: метрики хоста OMV7, контейнеров Duty/NPM и PostgreSQL. Grafana доступна через **Nginx Proxy Manager** на `https://grafana.duty-w.ru`.
 
 Prometheus, Alertmanager и exporters слушают только **127.0.0.1** на NAS — **не** открывайте порты 9090/9100/9187 в WAN.
+
+**Справочник метрик:** [METRICS.md](./METRICS.md) — подробное описание каждой метрики, labels, PromQL и алертов.
 
 ## Пути на NAS (OMV)
 

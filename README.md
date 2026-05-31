@@ -1,7 +1,5 @@
 # График дежурств — Backend
 
-[![GitHub Pages](https://img.shields.io/badge/demo-GitHub%20Pages-blue)](https://madmaxim22.github.io/duty-schedule/)
-
 REST API для мобильного веб-приложения учёта дежурств по кабинетам.
 
 **Расположение в монорепозитории:** `C:\Users\Максим\Documents\Frontend\Duty\duty-schedule-backend`  

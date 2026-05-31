@@ -31,3 +31,10 @@ if [ -f "$MON_DIR/docker-compose.yml" ]; then
   cd "$MON_DIR"
   docker compose up -d
 fi
+
+# MkDocs static site (docs.duty-w.ru via NPM)
+DOCS_DIR="$BASE/duty-schedule/duty-schedule-backend/docker/docs"
+if [ -f "$DOCS_DIR/docker-compose.yml" ]; then
+  cd "$DOCS_DIR"
+  docker compose up -d
+fi
