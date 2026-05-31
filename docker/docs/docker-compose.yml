@@ -1,13 +1,13 @@
 # Статика MkDocs (docs.duty-w.ru) — только внутри Docker-сети duty-proxy.
-# Порт наружу не публикуется; доступ через NPM + Basic Auth.
+# Порт наружу не публикуется; доступ через NPM (HTTPS) + Basic Auth в nginx.
 #
 # На NAS (после git pull):
 #   cd .../duty-schedule-backend/docker/docs
-#   mkdir -p site
+#   sh scripts/generate-htpasswd.sh   # один раз
 #   docker compose up -d
 #
-# Обновление site/ с ПК: scripts/deploy-docs-to-nas.ps1
-# Подробности: docs/deployment/docs-site.md (в репозитории Duty)
+# Обновление site/ с ПК: scripts/deploy-docs-to-nas.ps1 (корень Duty)
+# NPM Proxy Host: docs.duty-w.ru -> duty-docs:80, Access List = Общедоступный
 
 services:
   docs:
@@ -17,6 +17,7 @@ services:
     volumes:
       - ./site:/usr/share/nginx/html:ro
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./.htpasswd:/etc/nginx/.htpasswd:ro
     networks:
       - duty-proxy
 
