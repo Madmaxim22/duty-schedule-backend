@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import { verifyAccessToken, type AccessTokenPayload } from '../lib/jwt.js';
 import { AppError } from '../lib/errors.js';
+import { touchUserLastActive } from '../lib/user-activity.js';
 
 export type AuthRequest = Request & { user?: AccessTokenPayload };
 
@@ -14,6 +15,7 @@ export function authenticate(req: AuthRequest, _res: Response, next: NextFunctio
   try {
     const token = header.slice(7);
     req.user = verifyAccessToken(token);
+    touchUserLastActive(req.user.sub);
     next();
   } catch {
     next(new AppError(401, 'Недействительный токен'));

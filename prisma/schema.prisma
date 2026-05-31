@@ -52,6 +52,11 @@ enum SupportThreadStatus {
   closed
 }
 
+enum AuthEventType {
+  login
+  register
+}
+
 model User {
   id              String     @id @default(uuid())
   email           String     @unique
@@ -64,6 +69,7 @@ model User {
   avatarFocusX    Int        @default(50) @map("avatar_focus_x")
   avatarFocusY    Int        @default(50) @map("avatar_focus_y")
   createdAt       DateTime   @default(now()) @map("created_at")
+  lastActiveAt    DateTime?  @map("last_active_at")
 
   currentPhoto            UserPhoto?             @relation("CurrentPhoto", fields: [currentPhotoId], references: [id], onDelete: SetNull)
   photos                  UserPhoto[]            @relation("UserPhotos")
@@ -87,8 +93,23 @@ model User {
   chatMessageReactions      ChatMessageReaction[]
   chatMessageHides          ChatMessageUserHide[]
   chatAttachmentsUploaded   ChatMessageAttachment[]   @relation("ChatAttachmentUploader")
+  authEvents                AuthEvent[]
 
+  @@index([lastActiveAt])
   @@map("users")
+}
+
+model AuthEvent {
+  id        String        @id @default(uuid())
+  type      AuthEventType
+  userId    String?       @map("user_id")
+  createdAt DateTime      @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([type, createdAt])
+  @@index([userId, createdAt])
+  @@map("auth_events")
 }
 
 model PushSubscription {

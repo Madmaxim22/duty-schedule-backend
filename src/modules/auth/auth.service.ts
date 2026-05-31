@@ -52,6 +52,10 @@ export async function registerUser(input: {
     }),
   );
 
+  await prisma.authEvent.create({
+    data: { type: 'register', userId: user.id },
+  });
+
   return toPublicUser(user);
 }
 
@@ -85,6 +89,15 @@ export async function loginUser(input: { email: string; password: string }) {
 
   await prisma.refreshToken.create({
     data: { token: refreshToken, userId: user.id, expiresAt },
+  });
+
+  await prisma.authEvent.create({
+    data: { type: 'login', userId: user.id },
+  });
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { lastActiveAt: new Date() },
   });
 
   return { accessToken, refreshToken, user: toPublicUser(user) };
