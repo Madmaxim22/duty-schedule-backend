@@ -4,11 +4,18 @@ import { authenticate, type AuthRequest } from '../../middleware/auth.js';
 import { AppError } from '../../lib/errors.js';
 import {
   getVapidPublicKey,
+  isFcmEnabled,
   isPushEnabled,
   removeSubscription,
   saveSubscription,
 } from './push.service.js';
-import { pushSubscriptionSchema, unsubscribeSchema } from './push.schemas.js';
+import { removeFcmToken, saveFcmToken } from './push.fcm.js';
+import {
+  fcmSubscribeSchema,
+  fcmUnsubscribeSchema,
+  pushSubscriptionSchema,
+  unsubscribeSchema,
+} from './push.schemas.js';
 
 const subscribeLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -51,6 +58,42 @@ pushRouter.delete(
     try {
       const body = unsubscribeSchema.parse(req.body);
       await removeSubscription(req.user!.sub, body.endpoint);
+      res.status(204).send();
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+pushRouter.get('/fcm-status', (_req, res) => {
+  res.json({ enabled: isFcmEnabled() });
+});
+
+pushRouter.post(
+  '/fcm-subscribe',
+  subscribeLimiter,
+  authenticate,
+  async (req: AuthRequest, res, next) => {
+    try {
+      if (!isFcmEnabled()) {
+        throw new AppError(503, 'FCM push не настроен на сервере');
+      }
+      const body = fcmSubscribeSchema.parse(req.body);
+      await saveFcmToken(req.user!.sub, body);
+      res.status(201).json({ message: 'FCM-подписка сохранена' });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+pushRouter.delete(
+  '/fcm-subscribe',
+  authenticate,
+  async (req: AuthRequest, res, next) => {
+    try {
+      const body = fcmUnsubscribeSchema.parse(req.body);
+      await removeFcmToken(req.user!.sub, body.token);
       res.status(204).send();
     } catch (e) {
       next(e);

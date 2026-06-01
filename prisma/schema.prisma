@@ -97,6 +97,7 @@ model User {
   dutyChangesAsNew        DutyAssignmentChange[] @relation("NewUser")
   photoLikesGiven         PhotoLike[]            @relation("PhotoLikesGiven")
   pushSubscriptions       PushSubscription[]
+  fcmDeviceTokens         FcmDeviceToken[]
   notifications           Notification[]         @relation("NotificationRecipient")
   notificationsActed      Notification[]         @relation("NotificationActor")
   supportThreadsAuthored    SupportThread[]        @relation("SupportThreadAuthor")
@@ -174,6 +175,20 @@ model PushSubscription {
 
   @@index([userId])
   @@map("push_subscriptions")
+}
+
+model FcmDeviceToken {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  token     String   @unique
+  platform  String   @default("android")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("fcm_device_tokens")
 }
 
 model UserPhoto {

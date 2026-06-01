@@ -29,6 +29,10 @@ export const env = {
   vapidPublicKey: process.env.VAPID_PUBLIC_KEY ?? '',
   vapidPrivateKey: process.env.VAPID_PRIVATE_KEY ?? '',
   vapidSubject: process.env.VAPID_SUBJECT ?? 'mailto:admin@duty.local',
+  firebaseProjectId: process.env.FIREBASE_PROJECT_ID ?? '',
+  firebaseClientEmail: process.env.FIREBASE_CLIENT_EMAIL ?? '',
+  firebasePrivateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n') ?? '',
+  googleApplicationCredentials: process.env.GOOGLE_APPLICATION_CREDENTIALS ?? '',
 };
 
 export function assertProductionEnv(): void {

@@ -1,6 +1,7 @@
 import webpush from 'web-push';
 import { prisma } from '../../lib/prisma.js';
 import { env } from '../../config/env.js';
+import { deliverFcmPush, getFcmTokensForUsers, isFcmEnabled } from './push.fcm.js';
 import type { PushSubscriptionInput } from './push.schemas.js';
 
 let vapidConfigured = false;
@@ -22,6 +23,8 @@ export function isPushEnabled(): boolean {
 export function getVapidPublicKey(): string | null {
   return env.vapidPublicKey || null;
 }
+
+export { isFcmEnabled } from './push.fcm.js';
 
 export async function saveSubscription(userId: string, input: PushSubscriptionInput) {
   return prisma.pushSubscription.upsert({
@@ -65,7 +68,12 @@ export type PushMessage = {
   tag?: string;
 };
 
-async function deliverPush(subscriptions: Awaited<ReturnType<typeof getSubscriptionsForUserIds>>, payload: PushMessage) {
+async function deliverWebPush(
+  subscriptions: Awaited<ReturnType<typeof getSubscriptionsForUserIds>>,
+  payload: PushMessage,
+) {
+  if (!ensureVapid() || subscriptions.length === 0) return;
+
   const json = JSON.stringify(payload);
 
   await Promise.all(
@@ -91,31 +99,29 @@ async function deliverPush(subscriptions: Awaited<ReturnType<typeof getSubscript
           return;
         }
 
-        console.error('[push] send failed', sub.endpoint, err);
+        console.error('[push:web] send failed', sub.endpoint, err);
       }
     }),
   );
 }
 
 export async function sendPushToUsers(userIds: string[], message: PushMessage): Promise<void> {
-  if (!ensureVapid() || userIds.length === 0) return;
+  const uniqueIds = [...new Set(userIds)];
+  if (uniqueIds.length === 0) return;
 
-  const subscriptions = await getSubscriptionsForUserIds(userIds);
-  if (subscriptions.length === 0) return;
+  const [subscriptions, fcmTokens] = await Promise.all([
+    getSubscriptionsForUserIds(uniqueIds),
+    getFcmTokensForUsers(uniqueIds),
+  ]);
 
-  await deliverPush(subscriptions, message);
+  await Promise.all([
+    deliverWebPush(subscriptions, message),
+    deliverFcmPush(fcmTokens, message),
+  ]);
 }
 
 export async function sendPushToUser(userId: string, message: PushMessage): Promise<void> {
   return sendPushToUsers([userId], message);
-}
-
-async function getAdminSubscriptions() {
-  const admins = await prisma.user.findMany({
-    where: { role: 'admin', status: 'approved' },
-    select: { id: true },
-  });
-  return getSubscriptionsForUserIds(admins.map((a) => a.id));
 }
 
 function isExpiredSubscriptionError(statusCode?: number): boolean {
@@ -126,17 +132,24 @@ export async function notifyAdminsNewRegistration(input: {
   fullName: string;
   email: string;
 }) {
-  if (!ensureVapid()) {
+  const hasWeb = isPushEnabled();
+  const hasFcm = isFcmEnabled();
+
+  if (!hasWeb && !hasFcm) {
     if (env.nodeEnv === 'production') {
-      console.warn('[push] VAPID keys not configured, skipping notification');
+      console.warn('[push] VAPID and FCM not configured, skipping notification');
     }
     return;
   }
 
-  const subscriptions = await getAdminSubscriptions();
-  if (subscriptions.length === 0) return;
+  const admins = await prisma.user.findMany({
+    where: { role: 'admin', status: 'approved' },
+    select: { id: true },
+  });
 
-  await deliverPush(subscriptions, {
+  if (admins.length === 0) return;
+
+  await sendPushToUsers(admins.map((a) => a.id), {
     type: 'pending_registration',
     url: '/admin/users',
     title: 'Новая заявка на регистрацию',

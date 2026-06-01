@@ -151,6 +151,10 @@ curl http://localhost:3000/api/health
 | `VAPID_PUBLIC_KEY` | Web Push (публичный ключ) | из `npx web-push generate-vapid-keys` |
 | `VAPID_PRIVATE_KEY` | Web Push (секрет) | не публиковать |
 | `VAPID_SUBJECT` | Web Push contact | `mailto:admin@duty-w.ru` |
+| `FIREBASE_PROJECT_ID` | FCM (Android APK) | Firebase Console |
+| `FIREBASE_CLIENT_EMAIL` | Service Account | из JSON ключа |
+| `FIREBASE_PRIVATE_KEY` | Service Account (с `\n`) | не публиковать |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Альтернатива: путь к JSON в контейнере | volume на NAS |
 | `MAX_CHAT_ATTACHMENT_SIZE` | Макс. размер одного изображения в чате (байты) | `8388608` (8 МБ) |
 | `MAX_CHAT_ATTACHMENTS_PER_MESSAGE` | Макс. изображений в одном сообщении | `10` |
 | `CHAT_ATTACHMENT_ORPHAN_TTL_MS` | TTL «висячих» вложений до очистки (мс) | `3600000` (1 ч) |
@@ -159,13 +163,17 @@ curl http://localhost:3000/api/health
 
 Файл `.env` **не коммитьте** в git.
 
-### Web Push (оповещение админа о заявках)
+### Push-уведомления (Web + FCM)
 
-1. Сгенерируйте ключи: `npx web-push generate-vapid-keys` → добавьте в `.env`.
-2. Миграция: `npx prisma migrate deploy`.
-3. На frontend админ включает уведомления на `/admin/users`.
+**Web Push (браузер / PWA):** `npx web-push generate-vapid-keys` → `VAPID_*` в `.env`.
 
-При `POST /auth/register` push уходит всем подписанным пользователям с `role=admin` и `status=approved`. Без VAPID регистрация не ломается.
+**FCM (Android APK):** Firebase Console → Android app `ru.dutyw.schedule` → Service Account JSON → `FIREBASE_*` в `.env` на NAS (см. [duty-schedule-android/README.md](../duty-schedule-android/README.md#fcm-push-android-apk)).
+
+Миграция: `npx prisma migrate deploy` (таблицы `push_subscriptions`, `fcm_device_tokens`).
+
+Включение на клиенте: **Настройки → Уведомления** (браузер — VAPID; APK — FCM). `sendPushToUsers` шлёт **параллельно** на оба канала. Без VAPID/FCM API и регистрация не ломаются.
+
+При `POST /auth/register` push уходит админам с активной подпиской (web и/или FCM).
 
 Подробнее: [корневой README — Web Push](../README.md#web-push-для-администратора).
 
@@ -242,13 +250,16 @@ curl http://localhost:3000/api/health
 
 За reverse-proxy (nginx Duty) нужен проброс `Upgrade` / `Connection` до API (в актуальном `nginx/nginx.conf` — и в `location /api/ws/`, и в общем `location /api/`); в NPM — включить поддержку WebSockets для Proxy Host. Ответ Express `Cannot GET /api/ws/chat` означает, что handshake дошёл как обычный GET без upgrade.
 
-### Web Push
+### Push (Web + FCM)
 
 | Метод | Путь | Доступ | Описание |
 |-------|------|--------|----------|
 | GET | `/push/vapid-public-key` | публичный | Публичный VAPID (503 без ключей) |
-| POST | `/push/subscribe` | admin | Сохранить подписку |
-| DELETE | `/push/subscribe` | admin | `{ "endpoint" }` — отписаться |
+| POST | `/push/subscribe` | approved | Web Push: сохранить подписку |
+| DELETE | `/push/subscribe` | approved | `{ "endpoint" }` — отписаться |
+| GET | `/push/fcm-status` | публичный | `{ "enabled": true/false }` — настроен ли FCM на сервере |
+| POST | `/push/fcm-subscribe` | approved | `{ "token", "platform"? }` — FCM token из APK |
+| DELETE | `/push/fcm-subscribe` | approved | `{ "token" }` — удалить token |
 
 ### Пользователи для назначений
 
