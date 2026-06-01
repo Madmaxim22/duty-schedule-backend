@@ -32,14 +32,30 @@ enum DutyChangeType {
 enum DutyChangeSource {
   import
   manual
+  swap
 }
 
 enum NotificationType {
   photo_like
   duty_change
+  duty_swap
   user_registration
   support_message
   chat_message
+}
+
+enum DutySwapRequestStatus {
+  pending_counterparty
+  rejected_counterparty
+  pending_admin
+  approved
+  rejected_admin
+  cancelled
+}
+
+enum ChatMessageKind {
+  text
+  duty_swap_request
 }
 
 enum ChatRoomType {
@@ -95,6 +111,9 @@ model User {
   chatAttachmentsUploaded   ChatMessageAttachment[]   @relation("ChatAttachmentUploader")
   authEvents                AuthEvent[]
   dutyDayRevisionsUpdated   DutyDayRevision[]
+  swapRequestsAsRequester   DutySwapRequest[] @relation("SwapRequester")
+  swapRequestsAsCounterparty DutySwapRequest[] @relation("SwapCounterparty")
+  swapRequestsReviewed      DutySwapRequest[] @relation("SwapReviewer")
 
   @@index([lastActiveAt])
   @@map("users")
@@ -239,6 +258,39 @@ model DutyAssignmentChange {
   @@map("duty_assignment_changes")
 }
 
+model DutySwapRequest {
+  id                      String                @id @default(uuid())
+  requesterId             String                @map("requester_id")
+  counterpartyId          String                @map("counterparty_id")
+  requesterDutyDate       DateTime              @map("requester_duty_date") @db.Date
+  requesterSection        DutySection           @map("requester_section")
+  requesterOffice         String                @map("requester_office")
+  counterpartyDutyDate    DateTime              @map("counterparty_duty_date") @db.Date
+  counterpartySection     DutySection           @map("counterparty_section")
+  counterpartyOffice      String                @map("counterparty_office")
+  reason                  String
+  status                  DutySwapRequestStatus @default(pending_counterparty)
+  counterpartyRejectReason String?              @map("counterparty_reject_reason")
+  counterpartyRespondedAt DateTime?             @map("counterparty_responded_at")
+  reviewedById            String?               @map("reviewed_by_id")
+  adminComment            String?               @map("admin_comment")
+  reviewedAt              DateTime?             @map("reviewed_at")
+  chatMessageId           String?               @unique @map("chat_message_id")
+  chatRoomId              String?               @map("chat_room_id")
+  createdAt               DateTime              @default(now()) @map("created_at")
+  updatedAt               DateTime              @updatedAt @map("updated_at")
+
+  requester   User         @relation("SwapRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  counterparty User        @relation("SwapCounterparty", fields: [counterpartyId], references: [id], onDelete: Cascade)
+  reviewer    User?        @relation("SwapReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  chatMessage ChatMessage? @relation(fields: [chatMessageId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([requesterId])
+  @@index([counterpartyId])
+  @@map("duty_swap_requests")
+}
+
 model Notification {
   id                     String           @id @default(uuid())
   userId                 String           @map("user_id")
@@ -335,25 +387,28 @@ model ChatMember {
 }
 
 model ChatMessage {
-  id               String    @id @default(uuid())
-  roomId           String    @map("room_id")
-  authorId         String    @map("author_id")
+  id               String          @id @default(uuid())
+  roomId           String          @map("room_id")
+  authorId         String          @map("author_id")
+  kind             ChatMessageKind @default(text)
   body             String
-  replyToMessageId String?   @map("reply_to_message_id")
-  deletedAt        DateTime? @map("deleted_at")
-  deletedById      String?   @map("deleted_by_id")
-  editedAt         DateTime? @map("edited_at")
-  createdAt        DateTime  @default(now()) @map("created_at")
+  payload          Json?
+  replyToMessageId String?         @map("reply_to_message_id")
+  deletedAt        DateTime?       @map("deleted_at")
+  deletedById      String?         @map("deleted_by_id")
+  editedAt         DateTime?       @map("edited_at")
+  createdAt        DateTime        @default(now()) @map("created_at")
 
-  room        ChatRoom                @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  author      User                    @relation("ChatMessageAuthor", fields: [authorId], references: [id], onDelete: Cascade)
-  deletedBy   User?                   @relation("ChatMessageDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
-  replyTo     ChatMessage?            @relation("ChatMessageReply", fields: [replyToMessageId], references: [id], onDelete: SetNull)
-  replies     ChatMessage[]           @relation("ChatMessageReply")
-  deliveries  ChatMessageDelivery[]
-  reactions   ChatMessageReaction[]
-  attachments ChatMessageAttachment[]
-  hides       ChatMessageUserHide[]
+  room            ChatRoom                @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  author          User                    @relation("ChatMessageAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  deletedBy       User?                   @relation("ChatMessageDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  replyTo         ChatMessage?            @relation("ChatMessageReply", fields: [replyToMessageId], references: [id], onDelete: SetNull)
+  replies         ChatMessage[]           @relation("ChatMessageReply")
+  deliveries      ChatMessageDelivery[]
+  reactions       ChatMessageReaction[]
+  attachments     ChatMessageAttachment[]
+  hides           ChatMessageUserHide[]
+  dutySwapRequest DutySwapRequest?
 
   @@index([roomId, createdAt])
   @@index([replyToMessageId])

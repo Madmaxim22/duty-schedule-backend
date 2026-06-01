@@ -31,7 +31,9 @@ export type ChatAttachmentDto = {
 
 export type ChatMessageDto = {
   id: string;
+  kind?: 'text' | 'duty_swap_request';
   body: string;
+  payload?: Record<string, unknown>;
   createdAt: string;
   deleted?: boolean;
   editedAt?: string;

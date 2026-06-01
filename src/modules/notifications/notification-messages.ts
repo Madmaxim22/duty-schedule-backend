@@ -78,3 +78,50 @@ export function dutyChangePayload(change: DutyAssignmentChange) {
     source: change.source,
   };
 }
+
+type SwapUser = Pick<User, 'fullName'>;
+
+export function formatDutySwapNotificationBody(
+  status: string,
+  requester: SwapUser,
+  counterparty: SwapUser,
+  recipientUserId: string,
+  requesterId: string,
+): string {
+  const requesterName = personName(requester);
+  const counterpartyName = personName(counterparty);
+  const isRequester = recipientUserId === requesterId;
+
+  switch (status) {
+    case 'pending_admin':
+      return isRequester
+        ? `${counterpartyName} принял(а) заявку — ожидает администратора`
+        : `Заявка принята — ожидает администратора`;
+    case 'rejected_counterparty':
+      return isRequester
+        ? `${counterpartyName} отклонил(а) заявку`
+        : `Вы отклонили заявку`;
+    case 'approved':
+      return 'Смена дежурств одобрена администратором';
+    case 'rejected_admin':
+      return 'Заявка отклонена администратором';
+    case 'cancelled':
+      return isRequester
+        ? 'Вы отменили заявку'
+        : `${requesterName} отменил(а) заявку`;
+    default:
+      return 'Обновление заявки на смену дежурств';
+  }
+}
+
+export function dutySwapNotificationPayload(input: {
+  requestId: string;
+  chatRoomId: string | null;
+  status: string;
+}) {
+  return {
+    requestId: input.requestId,
+    chatRoomId: input.chatRoomId,
+    status: input.status,
+  };
+}

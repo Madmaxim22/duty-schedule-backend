@@ -17,6 +17,7 @@ import { notificationsRouter } from './modules/notifications/notifications.route
 import { statisticsRouter } from './modules/statistics/statistics.routes.js';
 import { adminSupportRouter, supportRouter } from './modules/support/support.routes.js';
 import { chatRouter } from './modules/chat/chat.routes.js';
+import { adminDutySwapsRouter, dutySwapsRouter } from './modules/duty-swaps/duty-swaps.routes.js';
 
 export function createApp() {
   const app = express();
@@ -46,6 +47,8 @@ export function createApp() {
   app.use('/api/users', userProfileRouter);
   app.use('/api/users', approvedUsersRouter);
   app.use('/api/schedule', scheduleRouter);
+  app.use('/api/duty-swaps', dutySwapsRouter);
+  app.use('/api/admin/duty-swaps', adminDutySwapsRouter);
   app.use('/api/photos', photoLikesRouter);
   app.use('/api/push', pushRouter);
   app.use('/api/notifications', notificationsRouter);

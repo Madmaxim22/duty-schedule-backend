@@ -2,8 +2,10 @@ import { prisma } from '../../lib/prisma.js';
 import { formatSurnameWithInitials } from '../../lib/format-name.js';
 import {
   dutyChangePayload,
+  dutySwapNotificationPayload,
   formatDutyChangeForAdmin,
   formatDutyChangeForUser,
+  formatDutySwapNotificationBody,
 } from './notification-messages.js';
 import { sendPushToUser, sendPushToUsers } from '../push/push.service.js';
 
@@ -240,6 +242,81 @@ export async function notifyChatMessage(input: {
       tag: `chat:${input.roomId}`,
     },
   );
+}
+
+export async function notifyDutySwapStatus(swapRequestId: string): Promise<void> {
+  const request = await prisma.dutySwapRequest.findUnique({
+    where: { id: swapRequestId },
+    include: {
+      requester: { select: { id: true, fullName: true } },
+      counterparty: { select: { id: true, fullName: true } },
+    },
+  });
+  if (!request) return;
+
+  if (request.status === 'pending_counterparty') {
+    return;
+  }
+
+  const payload = dutySwapNotificationPayload({
+    requestId: request.id,
+    chatRoomId: request.chatRoomId,
+    status: request.status,
+  });
+
+  const recipients: string[] = [request.requesterId, request.counterpartyId];
+
+  if (request.status === 'pending_admin') {
+    const admins = await prisma.user.findMany({
+      where: { role: 'admin', status: 'approved' },
+      select: { id: true },
+    });
+    for (const admin of admins) {
+      if (!recipients.includes(admin.id)) {
+        recipients.push(admin.id);
+      }
+    }
+  }
+
+  for (const userId of recipients) {
+    const isAdminRecipient =
+      request.status === 'pending_admin' &&
+      userId !== request.requesterId &&
+      userId !== request.counterpartyId;
+
+    const body = isAdminRecipient
+      ? `Заявка на смену: ${formatSurnameWithInitials(request.requester.fullName)} ↔ ${formatSurnameWithInitials(request.counterparty.fullName)} — ожидает решения`
+      : formatDutySwapNotificationBody(
+          request.status,
+          request.requester,
+          request.counterparty,
+          userId,
+          request.requesterId,
+        );
+
+    const url = isAdminRecipient
+      ? '/admin/duty-swaps'
+      : request.chatRoomId
+        ? `/chat/${request.chatRoomId}`
+        : '/duty-swaps';
+
+    await prisma.notification.create({
+      data: {
+        userId,
+        type: 'duty_swap',
+        body,
+        actorUserId: request.requesterId,
+        payload,
+      },
+    });
+
+    await sendPushToUser(userId, {
+      type: 'duty_swap',
+      title: PUSH_TITLE,
+      body,
+      url,
+    });
+  }
 }
 
 export function dispatchNotification(task: () => Promise<void>): void {

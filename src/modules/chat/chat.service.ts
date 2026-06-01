@@ -23,6 +23,11 @@ import type {
 } from '../../ws/chat-ws.types.js';
 import { compareReactionEmojis } from './chat-reactions.constants.js';
 import { userAvatarMiniSelect, userAvatarPublicSelect } from '../../lib/user-avatar-select.js';
+import {
+  buildDutySwapCardPayload,
+  DUTY_SWAP_CARD_BODY,
+  type DutySwapCardPayload,
+} from '../duty-swaps/duty-swap-card-payload.js';
 
 const authorSelect = {
   ...userAvatarPublicSelect,
@@ -42,6 +47,7 @@ const replyToSelect = {
 } as const;
 
 const lastMessageSelect = {
+  kind: true,
   body: true,
   createdAt: true,
   replyToMessageId: true,
@@ -103,6 +109,7 @@ function truncateReplyBody(body: string, max = REPLY_BODY_MAX): string {
 }
 
 type LastMessagePreviewSource = {
+  kind?: 'text' | 'duty_swap_request';
   body: string;
   replyToMessageId: string | null;
   deletedAt?: Date | null;
@@ -111,6 +118,7 @@ type LastMessagePreviewSource = {
 
 function formatLastMessagePreview(last: LastMessagePreviewSource): string {
   if (last.deletedAt) return DELETED_MESSAGE_BODY;
+  if (last.kind === 'duty_swap_request') return DUTY_SWAP_CARD_BODY;
   const base = last.body.trim() || (last.attachments.length > 0 ? 'Фото' : '');
   return last.replyToMessageId ? `↩ ${truncateReplyBody(base)}` : base;
 }
@@ -134,7 +142,9 @@ function mapReplyTo(
 
 function mapMessage(row: {
   id: string;
+  kind?: 'text' | 'duty_swap_request';
   body: string;
+  payload?: unknown;
   createdAt: Date;
   deletedAt?: Date | null;
   editedAt?: Date | null;
@@ -180,6 +190,7 @@ function mapMessage(row: {
   if (row.deletedAt) {
     return {
       id: row.id,
+      kind: row.kind ?? 'text',
       body: DELETED_MESSAGE_BODY,
       deleted: true,
       createdAt: row.createdAt.toISOString(),
@@ -191,11 +202,16 @@ function mapMessage(row: {
   }
 
   const attachments = row.attachments?.map(mapAttachment);
+  const kind = row.kind ?? 'text';
   return {
     id: row.id,
+    kind,
     body: row.body,
     createdAt: row.createdAt.toISOString(),
     reactions,
+    ...(kind === 'duty_swap_request' && row.payload
+      ? { payload: row.payload as DutySwapCardPayload }
+      : {}),
     ...(row.editedAt ? { editedAt: row.editedAt.toISOString() } : {}),
     ...(attachments && attachments.length > 0 ? { attachments } : {}),
     author,
@@ -1279,4 +1295,128 @@ export async function postMessage(
   );
 
   return { message: dto };
+}
+
+const swapRequestInclude = {
+  requester: { select: { id: true, fullName: true } },
+  counterparty: { select: { id: true, fullName: true } },
+} as const;
+
+type SwapRequestForCard = {
+  id: string;
+  status: import('@prisma/client').DutySwapRequestStatus;
+  requesterDutyDate: Date;
+  requesterSection: import('@prisma/client').DutySection;
+  requesterOffice: string;
+  counterpartyDutyDate: Date;
+  counterpartySection: import('@prisma/client').DutySection;
+  counterpartyOffice: string;
+  reason: string;
+  counterpartyRejectReason: string | null;
+  adminComment: string | null;
+  requester: { id: string; fullName: string };
+  counterparty: { id: string; fullName: string };
+};
+
+export async function postDutySwapCardMessage(input: {
+  roomId: string;
+  authorId: string;
+  swapRequest: SwapRequestForCard;
+}) {
+  const { roomId, authorId, swapRequest } = input;
+  await assertMember(roomId, authorId);
+
+  const room = await prisma.chatRoom.findUnique({
+    where: { id: roomId },
+    select: { type: true },
+  });
+  if (!room) {
+    throw new AppError(404, 'Чат не найден');
+  }
+
+  const payload = buildDutySwapCardPayload(swapRequest);
+  const author = await prisma.user.findUnique({
+    where: { id: authorId },
+    select: { id: true, fullName: true, role: true },
+  });
+  if (!author) {
+    throw new AppError(404, 'Пользователь не найден');
+  }
+
+  const message = await prisma.$transaction(async (tx) => {
+    const created = await tx.chatMessage.create({
+      data: {
+        roomId,
+        authorId,
+        kind: 'duty_swap_request',
+        body: DUTY_SWAP_CARD_BODY,
+        payload: payload as object,
+      },
+    });
+
+    await tx.chatRoom.update({
+      where: { id: roomId },
+      data: { updatedAt: new Date() },
+    });
+
+    await tx.chatMember.update({
+      where: { roomId_userId: { roomId, userId: authorId } },
+      data: { lastReadAt: new Date() },
+    });
+
+    return tx.chatMessage.findUniqueOrThrow({
+      where: { id: created.id },
+      include: messageInclude,
+    });
+  });
+
+  const dto = mapMessage(message, [], room.type === 'direct' ? 'sent' : undefined);
+
+  broadcastToRoom(roomId, { type: 'message.new', roomId, message: dto });
+  await emitRoomUpdates(roomId);
+
+  dispatchNotification(() =>
+    notifyChatMessage({
+      messageId: message.id,
+      roomId,
+      authorId: author.id,
+      authorFullName: author.fullName,
+      body: DUTY_SWAP_CARD_BODY,
+      hasAttachments: false,
+    }),
+  );
+
+  return { id: message.id, message: dto };
+}
+
+export async function updateDutySwapCardMessage(swapRequestId: string): Promise<void> {
+  const request = await prisma.dutySwapRequest.findUnique({
+    where: { id: swapRequestId },
+    include: swapRequestInclude,
+  });
+
+  if (!request?.chatMessageId || !request.chatRoomId) {
+    return;
+  }
+
+  const payload = buildDutySwapCardPayload(request);
+
+  await prisma.chatMessage.update({
+    where: { id: request.chatMessageId },
+    data: { payload: payload as object },
+  });
+
+  const row = await prisma.chatMessage.findUniqueOrThrow({
+    where: { id: request.chatMessageId },
+    include: messageInclude,
+  });
+
+  const dto = mapMessage(row, []);
+
+  broadcastToRoom(request.chatRoomId, {
+    type: 'message.updated',
+    roomId: request.chatRoomId,
+    message: dto,
+  });
+  await emitRoomUpdates(request.chatRoomId);
 }
