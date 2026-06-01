@@ -18,6 +18,12 @@ import { statisticsRouter } from './modules/statistics/statistics.routes.js';
 import { adminSupportRouter, supportRouter } from './modules/support/support.routes.js';
 import { chatRouter } from './modules/chat/chat.routes.js';
 import { adminDutySwapsRouter, dutySwapsRouter } from './modules/duty-swaps/duty-swaps.routes.js';
+import {
+  onboardingRouter,
+  releasesRouter,
+  versionRouter,
+} from './modules/onboarding/onboarding.routes.js';
+import { appVersion } from './lib/app-version.js';
 
 export function createApp() {
   const app = express();
@@ -34,7 +40,7 @@ export function createApp() {
   app.use('/uploads', express.static(path.resolve(env.uploadDir)));
 
   app.get('/api/health', (_req, res) => {
-    res.json({ status: 'ok' });
+    res.json({ status: 'ok', version: appVersion });
   });
 
   app.use('/api/auth', authRouter);
@@ -52,6 +58,9 @@ export function createApp() {
   app.use('/api/photos', photoLikesRouter);
   app.use('/api/push', pushRouter);
   app.use('/api/notifications', notificationsRouter);
+  app.use('/api/version', versionRouter);
+  app.use('/api/releases', releasesRouter);
+  app.use('/api/onboarding', onboardingRouter);
 
   app.use(errorHandler);
 

@@ -114,9 +114,39 @@ model User {
   swapRequestsAsRequester   DutySwapRequest[] @relation("SwapRequester")
   swapRequestsAsCounterparty DutySwapRequest[] @relation("SwapCounterparty")
   swapRequestsReviewed      DutySwapRequest[] @relation("SwapReviewer")
+  releaseAcks               UserReleaseAck[]
+  achievements              UserAchievement[]
 
   @@index([lastActiveAt])
   @@map("users")
+}
+
+model UserReleaseAck {
+  id              String   @id @default(uuid())
+  userId          String   @map("user_id")
+  releaseId       String   @map("release_id")
+  acknowledgedAt  DateTime @default(now()) @map("acknowledged_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, releaseId])
+  @@index([userId])
+  @@map("user_release_acks")
+}
+
+model UserAchievement {
+  id            String    @id @default(uuid())
+  userId        String    @map("user_id")
+  achievementId String    @map("achievement_id")
+  period        String
+  unlockedAt    DateTime  @default(now()) @map("unlocked_at")
+  seenAt        DateTime? @map("seen_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, achievementId, period])
+  @@index([userId, period])
+  @@map("user_achievements")
 }
 
 model AuthEvent {
