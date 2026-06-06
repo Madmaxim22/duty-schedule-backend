@@ -366,6 +366,8 @@ docker compose up -d --build
 
 Мониторинг NAS (Prometheus + Grafana): отдельный стек [docker/monitoring/](docker/monitoring/) — метрики хоста, контейнеров и PostgreSQL; Grafana на **https://grafana.duty-w.ru**.
 
+Характеристики железа production-NAS (плата, RAM, диски, порты): [docs/deployment/nas-hardware.md](../docs/deployment/nas-hardware.md) · [документация на сайте](https://docs.duty-w.ru/deployment/nas-hardware/).
+
 ## Структура проекта
 
 ```
