@@ -37,6 +37,16 @@ export const RELEASES: Record<string, ReleaseNotes> = {
       'Раздел «Обновления» с историей версий',
     ],
   },
+  '1.3.0': {
+    id: '1.3.0',
+    version: '1.3.0',
+    title: 'Видео в чате',
+    publishedAt: '2026-06-07',
+    items: [
+      'Отправка видео в чате (mp4, webm, mov, до 80 МБ)',
+      'Превью и просмотр видео в сообщении',
+    ],
+  },
 };
 
 export const CURRENT_RELEASE_ID = appReleaseId;
