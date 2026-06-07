@@ -156,10 +156,11 @@ curl http://localhost:3000/api/health
 | `FIREBASE_PRIVATE_KEY` | Service Account (с `\n`) | не публиковать |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Альтернатива: путь к JSON в контейнере | volume на NAS |
 | `MAX_CHAT_ATTACHMENT_SIZE` | Макс. размер одного изображения в чате (байты) | `8388608` (8 МБ) |
-| `MAX_CHAT_ATTACHMENTS_PER_MESSAGE` | Макс. изображений в одном сообщении | `10` |
+| `MAX_CHAT_VIDEO_ATTACHMENT_SIZE` | Макс. размер одного видео в чате (байты) | `83886080` (80 МБ) |
+| `MAX_CHAT_ATTACHMENTS_PER_MESSAGE` | Макс. вложений в одном сообщении | `10` |
 | `CHAT_ATTACHMENT_ORPHAN_TTL_MS` | TTL «висячих» вложений до очистки (мс) | `3600000` (1 ч) |
 
-Лимит тела запроса для пакетной загрузки фото: **80m** (10 × 8 МБ) в **duty-nginx** (`nginx/nginx.conf`, после правки — `docker compose up -d --force-recreate --no-deps nginx`) и в **NPM** — в **Advanced** Proxy Host `duty-w.ru` (`client_max_body_size 80m;` внутри `location /`; одного `server_proxy.conf` мало). Если 413 с `server: openresty` — узкое место NPM. Подробности: [docker/npm/README.md](docker/npm/README.md).
+Лимит тела запроса для загрузки вложений: **80m** (видео до 80 МБ или пакет фото) в **duty-nginx** (`nginx/nginx.conf`, после правки — `docker compose up -d --force-recreate --no-deps nginx`) и в **NPM** — в **Advanced** Proxy Host `duty-w.ru` (`client_max_body_size 80m;` внутри `location /`; одного `server_proxy.conf` мало). Если 413 с `server: openresty` — узкое место NPM. Подробности: [docker/npm/README.md](docker/npm/README.md).
 
 Файл `.env` **не коммитьте** в git.
 
@@ -234,7 +235,7 @@ curl http://localhost:3000/api/health
 | POST | `/chat/rooms/group` | approved | `{ "title", "memberIds" }` — группа (создатель входит в состав) |
 | GET | `/chat/rooms/:id` | member | Метаданные и участники |
 | GET | `/chat/rooms/:id/messages` | member | История; `?before=<ISO>&limit=50`; в каждом сообщении — `attachments[]` |
-| POST | `/chat/rooms/:id/attachments` | member | multipart `files[]` (JPEG/PNG/WebP/GIF) — шаг 1: загрузка, ответ `{ attachments: [{ id, fileName, mimeType, size, url }] }` |
+| POST | `/chat/rooms/:id/attachments` | member | multipart `files[]` (JPEG/PNG/WebP/GIF или MP4/WebM/MOV до 80 МБ) — шаг 1: загрузка, ответ `{ attachments: [{ id, fileName, mimeType, size, url, posterUrl?, durationMs? }] }` |
 | POST | `/chat/rooms/:id/messages` | member | JSON `{ "body"?, "replyToMessageId"?, "attachmentIds"? }` — шаг 2: текст и/или привязка вложений; нужен `body` или `attachmentIds` |
 | PATCH | `/chat/rooms/:id/read` | member | Отметить прочитанным (`lastReadAt`) |
 | PUT | `/chat/rooms/:id/messages/:messageId/reactions` | member | `{ "emoji" }` — реакция на сообщение |
@@ -242,7 +243,7 @@ curl http://localhost:3000/api/health
 | DELETE | `/chat/rooms/:id/messages/:messageId` | member | `{ "mode": "me" \| "everyone" }` — скрыть у себя или удалить у всех (только своё); ответ: `{ "message" }` (tombstone) или `{ "ok": true }` |
 | PATCH | `/chat/rooms/:id/messages/:messageId` | member (автор) | `{ "body": "...", "attachmentIds": ["uuid", ...] }` — редактировать своё сообщение (текст и набор вложений); ответ: `{ "message" }` с опциональным `editedAt` |
 
-Файлы чата: `GET /uploads/chat/<id>.<ext>` (статика API). В preview списка комнат сообщение только с фото — текст «Фото»; удалённое у всех — «Сообщение удалено».
+Файлы чата: `GET /uploads/chat/<id>.<ext>` (статика API). В preview списка комнат сообщение только с медиа — «Фото» или «Видео»; удалённое у всех — «Сообщение удалено». Фото и видео нельзя смешивать в одном сообщении.
 
 **WebSocket:** `ws(s)://<host>/api/ws/chat` — после connect первое сообщение `{ "type": "auth", "token": "<access JWT>" }`, затем `{ "type": "subscribe", "roomIds": ["..."] }`. События: `message.new` (в т.ч. `attachments`), `message.updated` (tombstone после удаления у всех), `message.hidden` (только инициатору после «удалить у меня»), `message.reaction`, `read.updated`, `room.updated`. Отправка — REST (двухшагово для вложений).
 

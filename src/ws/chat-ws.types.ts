@@ -27,6 +27,8 @@ export type ChatAttachmentDto = {
   width?: number;
   height?: number;
   url: string;
+  posterUrl?: string;
+  durationMs?: number;
 };
 
 export type ChatMessageDto = {

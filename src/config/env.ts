@@ -24,6 +24,7 @@ export const env = {
   uploadDir: process.env.UPLOAD_DIR ?? 'uploads',
   maxAvatarSize: Number(process.env.MAX_AVATAR_SIZE ?? 15_728_640),
   maxChatAttachmentSize: Number(process.env.MAX_CHAT_ATTACHMENT_SIZE ?? 8_388_608),
+  maxChatVideoAttachmentSize: Number(process.env.MAX_CHAT_VIDEO_ATTACHMENT_SIZE ?? 83_886_080),
   maxChatAttachmentsPerMessage: Number(process.env.MAX_CHAT_ATTACHMENTS_PER_MESSAGE ?? 10),
   chatAttachmentOrphanTtlMs: Number(process.env.CHAT_ATTACHMENT_ORPHAN_TTL_MS ?? 3_600_000),
   vapidPublicKey: process.env.VAPID_PUBLIC_KEY ?? '',

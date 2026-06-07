@@ -218,7 +218,7 @@ export async function notifyChatMessage(input: {
   authorId: string;
   authorFullName: string;
   body: string;
-  hasAttachments?: boolean;
+  attachmentPreview?: string;
 }): Promise<void> {
   const members = await prisma.chatMember.findMany({
     where: { roomId: input.roomId, userId: { not: input.authorId } },
@@ -226,8 +226,7 @@ export async function notifyChatMessage(input: {
   });
   if (members.length === 0) return;
 
-  const previewText =
-    input.body.trim() || (input.hasAttachments ? 'Фото' : '');
+  const previewText = input.body.trim() || input.attachmentPreview || '';
   const preview = previewMessage(previewText);
   const notificationBody = `${formatSurnameWithInitials(input.authorFullName)}: ${preview}`;
   const pushUrl = `/chat/${input.roomId}`;

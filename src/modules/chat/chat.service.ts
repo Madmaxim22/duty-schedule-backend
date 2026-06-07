@@ -3,10 +3,18 @@ import type { ChatRoomType, UserRole } from '@prisma/client';
 import { env } from '../../config/env.js';
 import {
   extensionFromUrl,
+  removeChatAttachmentAssets,
   removeChatAttachmentFile,
   sanitizeChatFileName,
   saveChatAttachmentImage,
 } from '../../lib/chat-attachments.js';
+import {
+  assertHomogeneousAttachmentKinds,
+  attachmentPreviewLabel,
+  isChatImageMime,
+  isChatVideoMime,
+} from '../../lib/chat-attachment-kind.js';
+import { saveChatAttachmentVideo } from '../../lib/chat-video.js';
 import { prisma } from '../../lib/prisma.js';
 import { AppError } from '../../lib/errors.js';
 import {
@@ -44,6 +52,7 @@ const replyToSelect = {
   body: true,
   deletedAt: true,
   author: { select: { id: true, fullName: true } },
+  attachments: { take: 10, select: { mimeType: true } },
 } as const;
 
 const lastMessageSelect = {
@@ -52,7 +61,7 @@ const lastMessageSelect = {
   createdAt: true,
   replyToMessageId: true,
   deletedAt: true,
-  attachments: { take: 1, select: { id: true } },
+  attachments: { take: 10, select: { id: true, mimeType: true } },
 } as const;
 
 function visibleMessagesForUser(userId: string) {
@@ -67,6 +76,8 @@ const attachmentSelect = {
   width: true,
   height: true,
   url: true,
+  posterUrl: true,
+  durationMs: true,
 } as const;
 
 const messageInclude = {
@@ -83,6 +94,8 @@ function mapAttachment(row: {
   width: number | null;
   height: number | null;
   url: string;
+  posterUrl?: string | null;
+  durationMs?: number | null;
 }): ChatAttachmentDto {
   return {
     id: row.id,
@@ -91,12 +104,16 @@ function mapAttachment(row: {
     size: row.size,
     ...(row.width != null && row.height != null ? { width: row.width, height: row.height } : {}),
     url: row.url,
+    ...(row.posterUrl ? { posterUrl: row.posterUrl } : {}),
+    ...(row.durationMs != null ? { durationMs: row.durationMs } : {}),
   };
 }
 
-function replyQuoteBody(body: string): string {
+function replyQuoteBody(body: string, attachmentMimeTypes: string[] = []): string {
   const trimmed = body.trim();
-  return trimmed.length > 0 ? truncateReplyBody(trimmed) : 'Фото';
+  if (trimmed.length > 0) return truncateReplyBody(trimmed);
+  if (attachmentMimeTypes.length > 0) return attachmentPreviewLabel(attachmentMimeTypes);
+  return '';
 }
 
 function directKeyIds(a: string, b: string): [string, string] {
@@ -113,13 +130,17 @@ type LastMessagePreviewSource = {
   body: string;
   replyToMessageId: string | null;
   deletedAt?: Date | null;
-  attachments: { id: string }[];
+  attachments: { id: string; mimeType: string }[];
 };
 
 function formatLastMessagePreview(last: LastMessagePreviewSource): string {
   if (last.deletedAt) return DELETED_MESSAGE_BODY;
   if (last.kind === 'duty_swap_request') return DUTY_SWAP_CARD_BODY;
-  const base = last.body.trim() || (last.attachments.length > 0 ? 'Фото' : '');
+  const attachmentLabel =
+    last.attachments.length > 0
+      ? attachmentPreviewLabel(last.attachments.map((a) => a.mimeType))
+      : '';
+  const base = last.body.trim() || attachmentLabel;
   return last.replyToMessageId ? `↩ ${truncateReplyBody(base)}` : base;
 }
 
@@ -129,10 +150,12 @@ function mapReplyTo(
     body: string;
     deletedAt?: Date | null;
     author: { id: string; fullName: string };
+    attachments?: { mimeType: string }[];
   } | null | undefined,
 ): ChatMessageReplyToDto | undefined {
   if (!replyTo) return undefined;
-  const body = replyTo.deletedAt ? DELETED_MESSAGE_BODY : replyQuoteBody(replyTo.body);
+  const mimeTypes = replyTo.attachments?.map((a) => a.mimeType) ?? [];
+  const body = replyTo.deletedAt ? DELETED_MESSAGE_BODY : replyQuoteBody(replyTo.body, mimeTypes);
   return {
     id: replyTo.id,
     body,
@@ -171,6 +194,8 @@ function mapMessage(row: {
     width: number | null;
     height: number | null;
     url: string;
+    posterUrl?: string | null;
+    durationMs?: number | null;
   }>;
 },
   reactions: ChatReactionSummaryDto[] = [],
@@ -347,10 +372,10 @@ export async function deleteMessage(
     await prisma.$transaction(async (tx) => {
       const attachments = await tx.chatMessageAttachment.findMany({
         where: { messageId },
-        select: { id: true, url: true },
+        select: { id: true, url: true, posterUrl: true },
       });
       for (const row of attachments) {
-        await removeChatAttachmentFile(row.id, extensionFromUrl(row.url));
+        await removeChatAttachmentAssets(row.id, row.url, row.posterUrl);
       }
       if (attachments.length > 0) {
         await tx.chatMessageAttachment.deleteMany({ where: { messageId } });
@@ -417,7 +442,7 @@ export async function editMessage(
       body: true,
       deletedAt: true,
       createdAt: true,
-      attachments: { select: { id: true, url: true } },
+      attachments: { select: { id: true, url: true, posterUrl: true } },
     },
   });
   if (!message || message.roomId !== roomId) {
@@ -470,7 +495,7 @@ export async function editMessage(
   const now = new Date();
   await prisma.$transaction(async (tx) => {
     for (const row of toRemove) {
-      await removeChatAttachmentFile(row.id, extensionFromUrl(row.url));
+      await removeChatAttachmentAssets(row.id, row.url, row.posterUrl);
     }
     if (toRemove.length > 0) {
       await tx.chatMessageAttachment.deleteMany({
@@ -702,6 +727,8 @@ async function assertAttachmentsLinkable(
     throw new AppError(400, 'Некорректные вложения');
   }
 
+  assertHomogeneousAttachmentKinds(rows.map((row) => row.mimeType));
+
   for (const row of rows) {
     if (row.roomId !== roomId) {
       throw new AppError(403, 'Вложение из другого чата');
@@ -734,6 +761,8 @@ async function assertEditAttachments(
   if (rows.length !== ids.length) {
     throw new AppError(400, 'Некорректные вложения');
   }
+
+  assertHomogeneousAttachmentKinds(rows.map((row) => row.mimeType));
 
   for (const row of rows) {
     if (row.roomId !== roomId) {
@@ -1169,32 +1198,68 @@ export async function uploadRoomAttachments(
     );
   }
 
+  assertHomogeneousAttachmentKinds(files.map((file) => file.mimetype));
+
   const attachments: ChatAttachmentDto[] = [];
 
   for (const file of files) {
+    if (isChatImageMime(file.mimetype) && file.size > env.maxChatAttachmentSize) {
+      throw new AppError(400, 'Изображение слишком большое');
+    }
+    if (isChatVideoMime(file.mimetype) && file.size > env.maxChatVideoAttachmentSize) {
+      const limitMb = Math.round(env.maxChatVideoAttachmentSize / 1024 / 1024);
+      throw new AppError(400, `Видео не должно превышать ${limitMb} МБ`);
+    }
+
     const id = randomUUID();
     try {
-      const saved = await saveChatAttachmentImage(id, file.buffer, file.mimetype);
-      const row = await prisma.chatMessageAttachment.create({
-        data: {
-          id,
-          roomId,
-          uploaderId,
-          fileName: sanitizeChatFileName(file.originalname),
-          mimeType: saved.mimeType,
-          size: saved.size,
-          width: saved.width,
-          height: saved.height,
-          url: saved.url,
-        },
-        select: attachmentSelect,
-      });
-      attachments.push(mapAttachment(row));
+      if (isChatVideoMime(file.mimetype)) {
+        const saved = await saveChatAttachmentVideo(id, file.buffer, file.mimetype);
+        const row = await prisma.chatMessageAttachment.create({
+          data: {
+            id,
+            roomId,
+            uploaderId,
+            fileName: sanitizeChatFileName(file.originalname),
+            mimeType: saved.mimeType,
+            size: saved.size,
+            width: saved.width,
+            height: saved.height,
+            url: saved.url,
+            posterUrl: saved.posterUrl,
+            durationMs: saved.durationMs,
+          },
+          select: attachmentSelect,
+        });
+        attachments.push(mapAttachment(row));
+      } else {
+        const saved = await saveChatAttachmentImage(id, file.buffer, file.mimetype);
+        const row = await prisma.chatMessageAttachment.create({
+          data: {
+            id,
+            roomId,
+            uploaderId,
+            fileName: sanitizeChatFileName(file.originalname),
+            mimeType: saved.mimeType,
+            size: saved.size,
+            width: saved.width,
+            height: saved.height,
+            url: saved.url,
+          },
+          select: attachmentSelect,
+        });
+        attachments.push(mapAttachment(row));
+      }
     } catch (err) {
-      await removeChatAttachmentFile(id, 'webp').catch(() => undefined);
+      await removeChatAttachmentAssets(id, `/uploads/chat/${id}.webp`, null).catch(() => undefined);
       await removeChatAttachmentFile(id, 'gif').catch(() => undefined);
       await removeChatAttachmentFile(id, 'png').catch(() => undefined);
       await removeChatAttachmentFile(id, 'jpg').catch(() => undefined);
+      await removeChatAttachmentFile(id, 'mp4').catch(() => undefined);
+      await removeChatAttachmentFile(id, 'webm').catch(() => undefined);
+      await removeChatAttachmentFile(id, 'mov').catch(() => undefined);
+      const { removeChatVideoPoster } = await import('../../lib/chat-video.js');
+      await removeChatVideoPoster(id).catch(() => undefined);
       throw err;
     }
   }
@@ -1290,7 +1355,10 @@ export async function postMessage(
       authorId: author.id,
       authorFullName: author.fullName,
       body,
-      hasAttachments: (message.attachments?.length ?? 0) > 0,
+      attachmentPreview:
+        message.attachments && message.attachments.length > 0
+          ? attachmentPreviewLabel(message.attachments.map((a) => a.mimeType))
+          : undefined,
     }),
   );
 
@@ -1382,7 +1450,6 @@ export async function postDutySwapCardMessage(input: {
       authorId: author.id,
       authorFullName: author.fullName,
       body: DUTY_SWAP_CARD_BODY,
-      hasAttachments: false,
     }),
   );
 

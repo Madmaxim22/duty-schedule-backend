@@ -484,6 +484,8 @@ model ChatMessageAttachment {
   width      Int?
   height     Int?
   url        String
+  posterUrl  String?  @map("poster_url")
+  durationMs Int?     @map("duration_ms")
   createdAt  DateTime @default(now()) @map("created_at")
 
   room     ChatRoom     @relation(fields: [roomId], references: [id], onDelete: Cascade)

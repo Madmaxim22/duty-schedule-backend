@@ -1,16 +1,16 @@
 import { env } from '../../config/env.js';
-import { extensionFromUrl, removeChatAttachmentFile } from '../../lib/chat-attachments.js';
+import { removeChatAttachmentAssets } from '../../lib/chat-attachments.js';
 import { prisma } from '../../lib/prisma.js';
 
 export async function purgeOrphanChatAttachments(): Promise<number> {
   const cutoff = new Date(Date.now() - env.chatAttachmentOrphanTtlMs);
   const orphans = await prisma.chatMessageAttachment.findMany({
     where: { messageId: null, createdAt: { lt: cutoff } },
-    select: { id: true, url: true },
+    select: { id: true, url: true, posterUrl: true },
   });
 
   for (const row of orphans) {
-    await removeChatAttachmentFile(row.id, extensionFromUrl(row.url));
+    await removeChatAttachmentAssets(row.id, row.url, row.posterUrl);
   }
 
   if (orphans.length > 0) {

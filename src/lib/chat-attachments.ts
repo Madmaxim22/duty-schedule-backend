@@ -30,6 +30,12 @@ export function getChatAttachmentExtension(mimeType: string): string {
       return 'jpg';
     case 'image/webp':
       return 'webp';
+    case 'video/mp4':
+      return 'mp4';
+    case 'video/webm':
+      return 'webm';
+    case 'video/quicktime':
+      return 'mov';
     default:
       return 'bin';
   }
@@ -141,6 +147,18 @@ export async function removeChatAttachmentFile(id: string, ext: string) {
     await unlink(getChatAttachmentFilePath(id, ext));
   } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+  }
+}
+
+export async function removeChatAttachmentAssets(
+  id: string,
+  url: string,
+  posterUrl?: string | null,
+) {
+  await removeChatAttachmentFile(id, extensionFromUrl(url));
+  if (posterUrl) {
+    const { removeChatVideoPoster } = await import('./chat-video.js');
+    await removeChatVideoPoster(id);
   }
 }
 
