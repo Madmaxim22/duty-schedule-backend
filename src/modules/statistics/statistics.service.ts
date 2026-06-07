@@ -16,6 +16,55 @@ function yearRange(year: number) {
   return { start, end };
 }
 
+function todayUtc(): Date {
+  const now = new Date();
+  return new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+  );
+}
+
+/** Дежурства с начала периода по сегодня (включительно). */
+function actualRange(
+  bounds: { start: Date; end: Date },
+  today: Date,
+): { start: Date; end: Date } | null {
+  if (today < bounds.start) return null;
+  return { start: bounds.start, end: today < bounds.end ? today : bounds.end };
+}
+
+/** Дежурства после сегодня до конца периода. */
+function plannedRange(
+  bounds: { start: Date; end: Date },
+  today: Date,
+): { start: Date; end: Date } | null {
+  const tomorrow = new Date(today);
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+  if (tomorrow > bounds.end) return null;
+  return {
+    start: tomorrow < bounds.start ? bounds.start : tomorrow,
+    end: bounds.end,
+  };
+}
+
+async function countDutiesByUser(
+  range: { start: Date; end: Date } | null,
+): Promise<Map<string, number>> {
+  if (!range || range.start > range.end) return new Map();
+
+  const rows = await prisma.dutyAssignment.groupBy({
+    by: ['userId'],
+    where: {
+      userId: { not: null },
+      dutyDate: { gte: range.start, lte: range.end },
+    },
+    _count: true,
+  });
+
+  return countMap(
+    rows.map((r) => ({ userId: r.userId, _count: r._count })),
+  );
+}
+
 type AbsenceByType = { type: string; count: number; dates: string[] };
 
 function buildAbsenceByType(
@@ -59,6 +108,11 @@ function absenceCountMap(
 export async function getAdminStatistics(year: number, month: number) {
   const monthBounds = monthRange(year, month);
   const yearBounds = yearRange(year);
+  const today = todayUtc();
+  const monthActualBounds = actualRange(monthBounds, today);
+  const monthPlannedBounds = plannedRange(monthBounds, today);
+  const yearActualBounds = actualRange(yearBounds, today);
+  const yearPlannedBounds = plannedRange(yearBounds, today);
 
   const users = await prisma.user.findMany({
     where: { status: 'approved' },
@@ -67,28 +121,18 @@ export async function getAdminStatistics(year: number, month: number) {
   });
 
   const [
-    dutiesMonth,
-    dutiesYear,
+    dutiesMonthActual,
+    dutiesMonthPlanned,
+    dutiesYearActual,
+    dutiesYearPlanned,
     absencesMonth,
     absencesYear,
     absenceDetailsYear,
   ] = await Promise.all([
-    prisma.dutyAssignment.groupBy({
-      by: ['userId'],
-      where: {
-        userId: { not: null },
-        dutyDate: { gte: monthBounds.start, lte: monthBounds.end },
-      },
-      _count: true,
-    }),
-    prisma.dutyAssignment.groupBy({
-      by: ['userId'],
-      where: {
-        userId: { not: null },
-        dutyDate: { gte: yearBounds.start, lte: yearBounds.end },
-      },
-      _count: true,
-    }),
+    countDutiesByUser(monthActualBounds),
+    countDutiesByUser(monthPlannedBounds),
+    countDutiesByUser(yearActualBounds),
+    countDutiesByUser(yearPlannedBounds),
     prisma.userAbsence.groupBy({
       by: ['userId'],
       where: {
@@ -112,12 +156,6 @@ export async function getAdminStatistics(year: number, month: number) {
     }),
   ]);
 
-  const dutiesMonthMap = countMap(
-    dutiesMonth.map((r) => ({ userId: r.userId, _count: r._count })),
-  );
-  const dutiesYearMap = countMap(
-    dutiesYear.map((r) => ({ userId: r.userId, _count: r._count })),
-  );
   const absencesMonthMap = absenceCountMap(absencesMonth);
   const absencesYearMap = absenceCountMap(absencesYear);
 
@@ -139,19 +177,31 @@ export async function getAdminStatistics(year: number, month: number) {
   return {
     year,
     month,
-    users: users.map((user) => ({
-      id: user.id,
-      fullName: user.fullName,
-      duties: {
-        month: dutiesMonthMap.get(user.id) ?? 0,
-        year: dutiesYearMap.get(user.id) ?? 0,
-      },
-      absences: {
-        month: absencesMonthMap.get(user.id) ?? 0,
-        year: absencesYearMap.get(user.id) ?? 0,
-        monthByType: buildAbsenceByType(absencesByUserMonth.get(user.id) ?? []),
-        yearByType: buildAbsenceByType(absencesByUserYear.get(user.id) ?? []),
-      },
-    })),
+    asOfDate: formatDate(today),
+    users: users.map((user) => {
+      const monthActual = dutiesMonthActual.get(user.id) ?? 0;
+      const monthPlanned = dutiesMonthPlanned.get(user.id) ?? 0;
+      const yearActual = dutiesYearActual.get(user.id) ?? 0;
+      const yearPlanned = dutiesYearPlanned.get(user.id) ?? 0;
+
+      return {
+        id: user.id,
+        fullName: user.fullName,
+        duties: {
+          month: monthActual + monthPlanned,
+          year: yearActual + yearPlanned,
+          monthActual,
+          monthPlanned,
+          yearActual,
+          yearPlanned,
+        },
+        absences: {
+          month: absencesMonthMap.get(user.id) ?? 0,
+          year: absencesYearMap.get(user.id) ?? 0,
+          monthByType: buildAbsenceByType(absencesByUserMonth.get(user.id) ?? []),
+          yearByType: buildAbsenceByType(absencesByUserYear.get(user.id) ?? []),
+        },
+      };
+    }),
   };
 }
