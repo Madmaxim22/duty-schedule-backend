@@ -175,7 +175,7 @@ curl http://localhost:3000/api/health
 
 При `POST /auth/register` push уходит админам с активной подпиской (web и/или FCM).
 
-Подробнее: [корневой README — Web Push](../README.md#web-push-для-администратора).
+Подробнее: [docs — Web Push](../docs/product/web-push.md).
 
 ## API
 
