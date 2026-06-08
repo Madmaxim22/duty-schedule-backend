@@ -1204,7 +1204,8 @@ export async function uploadRoomAttachments(
 
   for (const file of files) {
     if (isChatImageMime(file.mimetype) && file.size > env.maxChatAttachmentSize) {
-      throw new AppError(400, 'Изображение слишком большое');
+      const limitMb = Math.round(env.maxChatAttachmentSize / 1024 / 1024);
+      throw new AppError(400, `Изображение не больше ${limitMb} МБ`);
     }
     if (isChatVideoMime(file.mimetype) && file.size > env.maxChatVideoAttachmentSize) {
       const limitMb = Math.round(env.maxChatVideoAttachmentSize / 1024 / 1024);
