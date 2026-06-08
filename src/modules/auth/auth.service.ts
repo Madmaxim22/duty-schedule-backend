@@ -144,8 +144,8 @@ export async function getMe(userId: string) {
   return toPublicUser(user);
 }
 
-export async function uploadUserAvatar(userId: string, buffer: Buffer) {
-  const { user } = await addPhoto(userId, buffer, { setAsCurrent: true });
+export async function uploadUserAvatar(userId: string, sourcePath: string) {
+  const { user } = await addPhoto(userId, sourcePath, { setAsCurrent: true });
   return user;
 }
 

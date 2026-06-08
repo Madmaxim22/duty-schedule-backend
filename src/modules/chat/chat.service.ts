@@ -1213,9 +1213,13 @@ export async function uploadRoomAttachments(
     }
 
     const id = randomUUID();
+    const sourcePath = file.path;
+    if (!sourcePath) {
+      throw new AppError(500, 'Файл не сохранён на диск');
+    }
     try {
       if (isChatVideoMime(file.mimetype)) {
-        const saved = await saveChatAttachmentVideo(id, file.buffer, file.mimetype);
+        const saved = await saveChatAttachmentVideo(id, sourcePath, file.mimetype);
         const row = await prisma.chatMessageAttachment.create({
           data: {
             id,
@@ -1234,7 +1238,7 @@ export async function uploadRoomAttachments(
         });
         attachments.push(mapAttachment(row));
       } else {
-        const saved = await saveChatAttachmentImage(id, file.buffer, file.mimetype);
+        const saved = await saveChatAttachmentImage(id, sourcePath, file.mimetype);
         const row = await prisma.chatMessageAttachment.create({
           data: {
             id,
@@ -1262,6 +1266,9 @@ export async function uploadRoomAttachments(
       const { removeChatVideoPoster } = await import('../../lib/chat-video.js');
       await removeChatVideoPoster(id).catch(() => undefined);
       throw err;
+    } finally {
+      const { removeTempUpload } = await import('../../lib/multer-disk.js');
+      await removeTempUpload(sourcePath).catch(() => undefined);
     }
   }
 

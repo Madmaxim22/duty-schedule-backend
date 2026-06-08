@@ -1,4 +1,4 @@
-import { mkdir, unlink, writeFile } from 'fs/promises';
+import { copyFile, mkdir, stat, unlink, writeFile } from 'fs/promises';
 import path from 'path';
 import sharp from 'sharp';
 import { env } from '../config/env.js';
@@ -53,7 +53,7 @@ export async function ensureChatUploadDirs() {
   await mkdir(path.join(env.uploadDir, 'chat'), { recursive: true });
 }
 
-async function processRasterImage(buffer: Buffer): Promise<{
+async function processRasterImage(sourcePath: string): Promise<{
   buffer: Buffer;
   ext: string;
   mimeType: string;
@@ -61,12 +61,12 @@ async function processRasterImage(buffer: Buffer): Promise<{
   height: number;
 }> {
   try {
-    const metadata = await sharp(buffer).metadata();
+    const metadata = await sharp(sourcePath).metadata();
     if (!metadata.width || !metadata.height) {
       throw new AppError(400, 'Не удалось прочитать изображение');
     }
 
-    const processed = await sharp(buffer)
+    const processed = await sharp(sourcePath)
       .rotate()
       .resize(MAX_CHAT_IMAGE_DIMENSION, MAX_CHAT_IMAGE_DIMENSION, {
         fit: 'inside',
@@ -95,7 +95,7 @@ async function processRasterImage(buffer: Buffer): Promise<{
 
 export async function saveChatAttachmentImage(
   id: string,
-  buffer: Buffer,
+  sourcePath: string,
   mimeType: string,
 ): Promise<{ url: string; ext: string; mimeType: string; size: number; width: number; height: number }> {
   if (!CHAT_IMAGE_MIME.has(mimeType)) {
@@ -104,39 +104,48 @@ export async function saveChatAttachmentImage(
 
   await ensureChatUploadDirs();
 
-  let outBuffer: Buffer;
   let ext: string;
   let outMime: string;
   let width: number;
   let height: number;
+  let size: number;
 
   if (mimeType === 'image/gif') {
-    const metadata = await sharp(buffer, { animated: true }).metadata();
+    const metadata = await sharp(sourcePath, { animated: true }).metadata();
     if (!metadata.width || !metadata.height) {
       throw new AppError(400, 'Не удалось прочитать GIF');
     }
-    outBuffer = buffer;
     ext = 'gif';
     outMime = 'image/gif';
     width = metadata.width;
     height = metadata.height;
-  } else {
-    const processed = await processRasterImage(buffer);
-    outBuffer = processed.buffer;
-    ext = processed.ext;
-    outMime = processed.mimeType;
-    width = processed.width;
-    height = processed.height;
+    const destPath = getChatAttachmentFilePath(id, ext);
+    await copyFile(sourcePath, destPath);
+    size = (await stat(destPath)).size;
+    return {
+      url: getChatAttachmentRelativePath(id, ext),
+      ext,
+      mimeType: outMime,
+      size,
+      width,
+      height,
+    };
   }
 
-  const filePath = getChatAttachmentFilePath(id, ext);
-  await writeFile(filePath, outBuffer);
+  const processed = await processRasterImage(sourcePath);
+  ext = processed.ext;
+  outMime = processed.mimeType;
+  width = processed.width;
+  height = processed.height;
+  const destPath = getChatAttachmentFilePath(id, ext);
+  await writeFile(destPath, processed.buffer);
+  size = processed.buffer.length;
 
   return {
     url: getChatAttachmentRelativePath(id, ext),
     ext,
     mimeType: outMime,
-    size: outBuffer.length,
+    size,
     width,
     height,
   };

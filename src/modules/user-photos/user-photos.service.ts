@@ -131,43 +131,48 @@ async function applyCurrentPhoto(
 
 export async function addPhoto(
   userId: string,
-  buffer: Buffer,
+  sourcePath: string,
   options: { setAsCurrent?: boolean } = {},
 ) {
   const setAsCurrent = options.setAsCurrent !== false;
 
-  const count = await prisma.userPhoto.count({ where: { userId } });
-  if (count >= MAX_USER_PHOTOS) {
-    throw new AppError(409, `Максимум ${MAX_USER_PHOTOS} фотографий`);
+  try {
+    const count = await prisma.userPhoto.count({ where: { userId } });
+    if (count >= MAX_USER_PHOTOS) {
+      throw new AppError(409, `Максимум ${MAX_USER_PHOTOS} фотографий`);
+    }
+
+    const photoId = randomUUID();
+    const url = await savePhotoFile(photoId, sourcePath);
+
+    const hasCurrent = await prisma.userPhoto.findFirst({
+      where: { userId, isCurrent: true },
+    });
+
+    const shouldBeCurrent = setAsCurrent || !hasCurrent;
+
+    const created = await prisma.userPhoto.create({
+      data: {
+        id: photoId,
+        userId,
+        url,
+        isCurrent: shouldBeCurrent,
+      },
+    });
+
+    if (shouldBeCurrent) {
+      await applyCurrentPhoto(userId, created);
+    }
+
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    return {
+      photo: mapPhotoRow(created, { likeCount: 0, likedByMe: false }),
+      user: toPublicUser(user),
+    };
+  } finally {
+    const { removeTempUpload } = await import('../../lib/multer-disk.js');
+    await removeTempUpload(sourcePath).catch(() => undefined);
   }
-
-  const photoId = randomUUID();
-  const url = await savePhotoFile(photoId, buffer);
-
-  const hasCurrent = await prisma.userPhoto.findFirst({
-    where: { userId, isCurrent: true },
-  });
-
-  const shouldBeCurrent = setAsCurrent || !hasCurrent;
-
-  const created = await prisma.userPhoto.create({
-    data: {
-      id: photoId,
-      userId,
-      url,
-      isCurrent: shouldBeCurrent,
-    },
-  });
-
-  if (shouldBeCurrent) {
-    await applyCurrentPhoto(userId, created);
-  }
-
-  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
-  return {
-    photo: mapPhotoRow(created, { likeCount: 0, likedByMe: false }),
-    user: toPublicUser(user),
-  };
 }
 
 export async function setCurrentPhoto(userId: string, photoId: string) {

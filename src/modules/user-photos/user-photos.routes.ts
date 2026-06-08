@@ -46,7 +46,10 @@ myPhotosRouter.post(
         throw new AppError(400, 'Файл не передан');
       }
       const query = uploadPhotoQuerySchema.parse(req.query);
-      const data = await addPhoto(req.user!.sub, req.file.buffer, {
+      if (!req.file.path) {
+        throw new AppError(400, 'Файл не сохранён на диск');
+      }
+      const data = await addPhoto(req.user!.sub, req.file.path, {
         setAsCurrent: parseSetAsCurrent(query),
       });
       res.status(201).json(data);

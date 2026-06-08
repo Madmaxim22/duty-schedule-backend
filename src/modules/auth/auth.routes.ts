@@ -105,7 +105,10 @@ authRouter.post(
       if (!req.file) {
         throw new AppError(400, 'Файл не передан');
       }
-      const user = await uploadUserAvatar(req.user!.sub, req.file.buffer);
+      if (!req.file.path) {
+        throw new AppError(400, 'Файл не сохранён на диск');
+      }
+      const user = await uploadUserAvatar(req.user!.sub, req.file.path);
       res.json({ user });
     } catch (e) {
       next(e);

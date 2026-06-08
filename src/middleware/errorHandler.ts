@@ -28,7 +28,9 @@ export function errorHandler(
 
   if (err instanceof MulterError) {
     const isChatUpload = _req.path.includes('/attachments');
-    const maxSize = isChatUpload ? env.maxChatAttachmentSize : env.maxAvatarSize;
+    const maxSize = isChatUpload
+      ? Math.max(env.maxChatAttachmentSize, env.maxChatVideoAttachmentSize)
+      : env.maxAvatarSize;
     const message =
       err.code === 'LIMIT_FILE_SIZE'
         ? `Файл слишком большой (макс. ${Math.round(maxSize / 1024 / 1024)} МБ)`

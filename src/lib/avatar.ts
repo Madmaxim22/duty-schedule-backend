@@ -28,14 +28,14 @@ export async function ensureUploadDirs() {
   await mkdir(path.join(env.uploadDir, 'photos'), { recursive: true });
 }
 
-export async function processAvatarImage(buffer: Buffer): Promise<Buffer> {
+export async function processAvatarImage(sourcePath: string): Promise<Buffer> {
   try {
-    const metadata = await sharp(buffer).metadata();
+    const metadata = await sharp(sourcePath).metadata();
     if (!metadata.width || !metadata.height) {
       throw new AppError(400, 'Не удалось прочитать изображение');
     }
 
-    return sharp(buffer)
+    return sharp(sourcePath)
       .rotate()
       .resize(MAX_PHOTO_DIMENSION, MAX_PHOTO_DIMENSION, {
         fit: 'inside',
@@ -50,15 +50,15 @@ export async function processAvatarImage(buffer: Buffer): Promise<Buffer> {
 }
 
 /** @deprecated Use savePhotoFile */
-export async function saveAvatarFile(userId: string, buffer: Buffer) {
-  const processed = await processAvatarImage(buffer);
+export async function saveAvatarFile(userId: string, sourcePath: string) {
+  const processed = await processAvatarImage(sourcePath);
   await ensureUploadDirs();
   await writeFile(getAvatarFilePath(userId), processed);
   return getAvatarRelativePath(userId);
 }
 
-export async function savePhotoFile(photoId: string, buffer: Buffer) {
-  const processed = await processAvatarImage(buffer);
+export async function savePhotoFile(photoId: string, sourcePath: string) {
+  const processed = await processAvatarImage(sourcePath);
   await ensureUploadDirs();
   await writeFile(getPhotoFilePath(photoId), processed);
   return getPhotoRelativePath(photoId);

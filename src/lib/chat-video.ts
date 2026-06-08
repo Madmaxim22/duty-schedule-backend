@@ -1,6 +1,6 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { unlink, writeFile } from 'fs/promises';
+import { rename, stat, unlink, writeFile } from 'fs/promises';
 import path from 'path';
 import sharp from 'sharp';
 import { env } from '../config/env.js';
@@ -121,7 +121,7 @@ async function extractChatVideoPoster(id: string, videoPath: string): Promise<st
 
 export async function saveChatAttachmentVideo(
   id: string,
-  buffer: Buffer,
+  sourcePath: string,
   mimeType: string,
 ): Promise<{
   url: string;
@@ -136,7 +136,9 @@ export async function saveChatAttachmentVideo(
   if (!CHAT_VIDEO_MIME.has(mimeType)) {
     throw new AppError(400, 'Допустимы только MP4, WebM или MOV');
   }
-  if (buffer.length > env.maxChatVideoAttachmentSize) {
+
+  const { size } = await stat(sourcePath);
+  if (size > env.maxChatVideoAttachmentSize) {
     const limitMb = Math.round(env.maxChatVideoAttachmentSize / 1024 / 1024);
     throw new AppError(400, `Видео не должно превышать ${limitMb} МБ`);
   }
@@ -144,7 +146,7 @@ export async function saveChatAttachmentVideo(
   await ensureChatUploadDirs();
   const ext = getVideoExtension(mimeType);
   const filePath = getChatAttachmentFilePath(id, ext);
-  await writeFile(filePath, buffer);
+  await rename(sourcePath, filePath);
 
   try {
     const probe = await probeChatVideoFile(filePath);
@@ -153,7 +155,7 @@ export async function saveChatAttachmentVideo(
       url: getChatAttachmentRelativePath(id, ext),
       ext,
       mimeType,
-      size: buffer.length,
+      size,
       width: probe.width,
       height: probe.height,
       posterUrl,

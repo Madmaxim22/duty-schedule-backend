@@ -3,6 +3,7 @@ import { createApp } from './app.js';
 import { env, assertProductionEnv } from './config/env.js';
 import { ensureUploadDirs } from './lib/avatar.js';
 import { ensureChatUploadDirs } from './lib/chat-attachments.js';
+import { ensureUploadTmpDir } from './lib/multer-disk.js';
 import { purgeOrphanChatAttachments } from './modules/chat/chat-attachments-cleanup.js';
 import { seedAdminIfNeeded } from './modules/auth/auth.service.js';
 import { attachChatWebSocket } from './ws/chat-ws.server.js';
@@ -24,6 +25,7 @@ attachChatWebSocket(server);
 async function start() {
   await ensureUploadDirs();
   await ensureChatUploadDirs();
+  await ensureUploadTmpDir();
   await purgeOrphanChatAttachments();
   await seedAdminIfNeeded();
   server.listen(env.port, () => {

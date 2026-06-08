@@ -245,6 +245,8 @@ curl http://localhost:3000/api/health
 
 Файлы чата: `GET /uploads/chat/<id>.<ext>` (статика API). В preview списка комнат сообщение только с медиа — «Фото» или «Видео»; удалённое у всех — «Сообщение удалено». Фото и видео нельзя смешивать в одном сообщении.
 
+Загрузки (чат, аватары, фото профиля) принимаются через multer **на диск** (`uploads/tmp/`), без буфера в RAM; видео переносится в `uploads/chat/` без повторного чтения в память.
+
 **WebSocket:** `ws(s)://<host>/api/ws/chat` — после connect первое сообщение `{ "type": "auth", "token": "<access JWT>" }`, затем `{ "type": "subscribe", "roomIds": ["..."] }`. События: `message.new` (в т.ч. `attachments`), `message.updated` (tombstone после удаления у всех), `message.hidden` (только инициатору после «удалить у меня»), `message.reaction`, `read.updated`, `room.updated`. Отправка — REST (двухшагово для вложений).
 
 При новом сообщении — Web Push участникам (кроме автора), URL `/chat/:roomId` (тег `chat:{roomId}` в шторке). In-app лента `/notifications` чат не использует. Лимиты: 30 POST сообщений / 15 мин; 60 POST вложений / 15 мин; 60 DELETE сообщений / 15 мин на пользователя.
