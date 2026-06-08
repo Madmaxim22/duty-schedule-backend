@@ -3,6 +3,7 @@ import { appReleaseId } from '../../lib/app-version.js';
 import {
   evaluateAchievementIds,
   getAchievementDefinition,
+  isSickLeaveAbsence,
   type MonthDutyStats,
 } from './achievements.config.js';
 import {
@@ -13,10 +14,6 @@ import {
 } from './moscow-date.js';
 import { REVEAL_GRACE_DAYS, REVEAL_LAST_DAYS } from './onboarding.config.js';
 import { CURRENT_RELEASE_ID, getCurrentRelease, RELEASES, type ReleaseNotes } from './releases.config.js';
-
-function formatDate(date: Date): string {
-  return date.toISOString().slice(0, 10);
-}
 
 export function resolveAchievementWindow(now: Date = new Date()): {
   inWindow: boolean;
@@ -37,55 +34,32 @@ export function resolveAchievementWindow(now: Date = new Date()): {
   return { inWindow: false, targetPeriod: null };
 }
 
-export async function getMaxDutyStreakInPeriod(
-  userId: string,
-  period: string,
-): Promise<number> {
-  const { start, end } = periodBounds(period);
-  const rows = await prisma.dutyAssignment.findMany({
-    where: {
-      userId,
-      dutyDate: { gte: start, lte: end },
-    },
-    select: { dutyDate: true },
-    distinct: ['dutyDate'],
-    orderBy: { dutyDate: 'asc' },
-  });
-
-  if (rows.length === 0) return 0;
-
-  const dates = rows.map((r) => formatDate(r.dutyDate));
-  let maxStreak = 1;
-  let current = 1;
-
-  for (let i = 1; i < dates.length; i++) {
-    const prev = new Date(`${dates[i - 1]}T12:00:00Z`);
-    const cur = new Date(`${dates[i]}T12:00:00Z`);
-    const diffDays = Math.round((cur.getTime() - prev.getTime()) / 86_400_000);
-    if (diffDays === 1) {
-      current += 1;
-      maxStreak = Math.max(maxStreak, current);
-    } else {
-      current = 1;
-    }
-  }
-
-  return maxStreak;
-}
-
 export async function getDutyStatsForMonth(
   userId: string,
   period: string,
 ): Promise<MonthDutyStats> {
   const { start, end } = periodBounds(period);
-  const dutyCount = await prisma.dutyAssignment.count({
-    where: {
-      userId,
-      dutyDate: { gte: start, lte: end },
-    },
-  });
-  const maxStreak = await getMaxDutyStreakInPeriod(userId, period);
-  return { dutyCount, maxStreak };
+  const [dutyCount, sickAbsences] = await Promise.all([
+    prisma.dutyAssignment.count({
+      where: {
+        userId,
+        dutyDate: { gte: start, lte: end },
+      },
+    }),
+    prisma.userAbsence.findMany({
+      where: {
+        userId,
+        absenceDate: { gte: start, lte: end },
+      },
+      select: { absenceType: true },
+    }),
+  ]);
+
+  const sickLeaveDays = sickAbsences.filter((a) =>
+    isSickLeaveAbsence(a.absenceType),
+  ).length;
+
+  return { dutyCount, sickLeaveDays };
 }
 
 export async function syncUserAchievementsForPeriod(
