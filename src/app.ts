@@ -23,6 +23,7 @@ import {
   releasesRouter,
   versionRouter,
 } from './modules/onboarding/onboarding.routes.js';
+import { absencesRouter } from './modules/absences/absences.routes.js';
 import { appVersion } from './lib/app-version.js';
 
 export function createApp() {
@@ -46,6 +47,7 @@ export function createApp() {
   app.use('/api/auth', authRouter);
   app.use('/api/admin/users', usersRouter);
   app.use('/api/admin/statistics', statisticsRouter);
+  app.use('/api/admin/absences', absencesRouter);
   app.use('/api/admin/support', adminSupportRouter);
   app.use('/api/support', supportRouter);
   app.use('/api/chat', chatRouter);

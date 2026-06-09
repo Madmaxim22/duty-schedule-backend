@@ -94,7 +94,7 @@ export async function getMonthSchedule(
 ) {
   const { start, end } = monthRange(year, month);
 
-  const [assignments, userAbsences] = await Promise.all([
+  const [assignments, monthAbsences] = await Promise.all([
     prisma.dutyAssignment.findMany({
       where: {
         dutyDate: { gte: start, lte: end },
@@ -114,15 +114,27 @@ export async function getMonthSchedule(
     }),
     prisma.userAbsence.findMany({
       where: {
-        userId: currentUserId,
         absenceDate: { gte: start, lte: end },
+      },
+      select: {
+        userId: true,
+        absenceDate: true,
+        absenceType: true,
       },
     }),
   ]);
 
   const absenceByDate = new Map(
-    userAbsences.map((a) => [formatDate(a.absenceDate), a.absenceType]),
+    monthAbsences
+      .filter((a) => a.userId === currentUserId)
+      .map((a) => [formatDate(a.absenceDate), a.absenceType]),
   );
+
+  const absences = monthAbsences.map((a) => ({
+    userId: a.userId,
+    date: formatDate(a.absenceDate),
+    absenceType: a.absenceType,
+  }));
 
   type DayAccum = {
     isMyDuty: boolean;
@@ -184,7 +196,12 @@ export async function getMonthSchedule(
   });
 
   if (!isAdmin) {
-    return { year, month, days };
+    return {
+      year,
+      month,
+      days,
+      absences: absences.filter((a) => a.userId === currentUserId),
+    };
   }
 
   const incompleteDates = eachDateInMonth(year, month).filter(
@@ -195,6 +212,7 @@ export async function getMonthSchedule(
     year,
     month,
     days,
+    absences,
     monthCoverage: {
       allComplete: incompleteDates.length === 0,
       incompleteDates,

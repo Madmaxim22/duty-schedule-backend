@@ -33,6 +33,7 @@ enum DutyChangeSource {
   import
   manual
   swap
+  absence
 }
 
 enum NotificationType {
